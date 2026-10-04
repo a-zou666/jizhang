@@ -2,17 +2,125 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <link rel="stylesheet" href="/src/styles.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>AI 记账</title>
+  <style>
+    :root { --primary: #007AFF; --bg: #F2F2F7; --card: #FFFFFF; --text: #1C1C1E; --sub: #8E8E93; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-top: max(20px, env(safe-area-inset-top)); }
+    .card { background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    h2 { margin-top: 0; font-size: 18px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+    input, select { width: 100%; padding: 12px; border: 1px solid #E5E5EA; border-radius: 10px; margin-bottom: 12px; box-sizing: border-box; font-size: 15px; background: #FAFAFA; outline: none; }
+    input:focus, select:focus { border-color: var(--primary); }
+    button { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+    button:active { opacity: 0.8; }
+    .expense-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #E5E5EA; font-size: 15px; }
+    .expense-item:last-child { border-bottom: none; }
+    .amount { color: #FF3B30; font-weight: 500; }
+    .settings-panel { display: none; margin-top: 15px; border-top: 1px solid #E5E5EA; padding-top: 15px; }
+    .toggle-btn { font-size: 13px; color: var(--primary); font-weight: normal; cursor: pointer; }
+  </style>
 </head>
 <body>
-  <main class="app-shell">
-    <header class="topbar"><div><p class="eyebrow">PERSONAL FINANCE</p><h1>账本日历</h1></div><div class="month-switcher"><button class="icon-button" id="previousMonth" aria-label="上个月">‹</button><span id="monthLabel"></span><button class="icon-button" id="nextMonth" aria-label="下个月">›</button></div></header>
-    <section class="summary-grid"><div class="summary-card summary-card-accent"><span>本月支出</span><strong>¥<span id="monthTotal">0.00</span></strong><small id="monthCount">暂无记录</small></div><div class="summary-card"><span>今日支出</span><strong>¥<span id="todayTotal">0.00</span></strong><small id="todayCount">准备开始记录</small></div></section>
-    <section class="calendar-card"><div class="weekday-row"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div class="calendar-grid" id="calendarGrid"></div></section>
-    <section class="entry-card"><div class="section-heading"><div><p class="eyebrow">QUICK ENTRY</p><h2>记下一笔</h2></div><span class="status-dot" id="statusText">随手输入即可</span></div><form id="entryForm"><label class="sr-only" for="userInput">账单内容</label><div class="input-row"><input type="text" id="userInput" autocomplete="off" placeholder="例如：今天早上吃肠粉花了 8 元" required><button type="submit" id="submitBtn"><span>记账</span><span aria-hidden="true">↗</span></button></div></form></section>
-    <section class="records-section"><div class="section-heading"><div><p class="eyebrow">RECENT RECORDS</p><h2 id="recordsTitle">今日账单</h2></div><button class="text-button" id="todayButton" type="button">回到今天</button></div><div id="expenseList" class="expense-list"></div></section>
-  </main>
-  <script type="module" src="/src/main.js"></script>
+  
+  <div class="card">
+    <h2>配置 AI 节点 <span class="toggle-btn" id="toggleSettings">展开/收起</span></h2>
+    <div class="settings-panel" id="settingsPanel">
+      <select id="apiUrl">
+        <option value="https://api.anyrouter.com/v1/chat/completions">AnyRouter (推荐)</option>
+        <option value="https://api.teamor.com/v1/chat/completions">TeamorRouter</option>
+        <option value="https://api.openai.com/v1/chat/completions">OpenAI 官方</option>
+      </select>
+      <input type="text" id="apiModel" placeholder="模型名称 (如 gpt-6-astra 或 claude-opus-5-5)">
+      <input type="password" id="apiKey" placeholder="输入 API Key (Bearer 后的部分)">
+      <button id="saveSettingsBtn" style="background: #34C759; padding: 10px;">保存配置</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>语音/文本记账</h2>
+    <input type="text" id="userInput" placeholder="例如：昨天买鼠标花了 120...">
+    <button id="submitBtn">一键记账</button>
+  </div>
+
+  <div class="card">
+    <h2>今日支出: <span style="color: #FF3B30;">¥<span id="todayTotal">0.00</span></span></h2>
+    <div id="expenseList"></div>
+  </div>
+
+  <script type="module">
+    const { invoke } = window.__TAURI__.core;
+
+    // 页面加载时读取本地配置
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('apiUrl').value = localStorage.getItem('apiUrl') || 'https://api.anyrouter.com/v1/chat/completions';
+      document.getElementById('apiModel').value = localStorage.getItem('apiModel') || 'gpt-6-astra';
+      document.getElementById('apiKey').value = localStorage.getItem('apiKey') || '';
+      
+      // 如果没有 Key，默认展开设置面板
+      if (!localStorage.getItem('apiKey')) {
+        document.getElementById('settingsPanel').style.display = 'block';
+      }
+    });
+
+    // 展开/收起设置
+    document.getElementById('toggleSettings').addEventListener('click', () => {
+      const panel = document.getElementById('settingsPanel');
+      panel.style.display = panel.style.display === 'none' || panel.style.display === '' ? 'block' : 'none';
+    });
+
+    // 保存设置
+    document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+      localStorage.setItem('apiUrl', document.getElementById('apiUrl').value);
+      localStorage.setItem('apiModel', document.getElementById('apiModel').value);
+      localStorage.setItem('apiKey', document.getElementById('apiKey').value);
+      alert('配置已保存！');
+      document.getElementById('settingsPanel').style.display = 'none';
+    });
+
+    // 提交记账
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+      const input = document.getElementById('userInput').value;
+      const apiKey = localStorage.getItem('apiKey');
+      const apiUrl = localStorage.getItem('apiUrl');
+      const apiModel = localStorage.getItem('apiModel');
+
+      if (!input) return;
+      if (!apiKey) return alert("请先展开顶部面板填写 API Key！");
+
+      const btn = document.getElementById('submitBtn');
+      btn.innerText = "处理中...";
+      
+      try {
+        // 将前端的参数传递给 Rust 后端
+        const expenses = await invoke('process_accounting', { 
+          text: input,
+          apiKey: apiKey,
+          apiUrl: apiUrl,
+          apiModel: apiModel
+        });
+        
+        let total = parseFloat(document.getElementById('todayTotal').innerText);
+        const listDiv = document.getElementById('expenseList');
+        
+        expenses.forEach(exp => {
+          total += exp.amount;
+          // 将最新的记录插在最前面
+          listDiv.insertAdjacentHTML('afterbegin', `
+            <div class="expense-item">
+              <span><b>${exp.category}</b> · ${exp.item}</span>
+              <span class="amount">-¥${exp.amount.toFixed(2)}</span>
+            </div>
+          `);
+        });
+        
+        document.getElementById('todayTotal').innerText = total.toFixed(2);
+        document.getElementById('userInput').value = '';
+      } catch (error) {
+        alert("处理失败：" + error);
+      } finally {
+        btn.innerText = "一键记账";
+      }
+    });
+  </script>
 </body>
 </html>
