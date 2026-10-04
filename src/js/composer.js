@@ -1,4 +1,4 @@
-/** 八、底部悬浮输入条：文本/语音记账 + 快捷分类 */
+/** 八、底部停靠区 · 输入条：文本/语音记账 + 快捷分类 */
 
 import { hasBackend, parseAccounting, transcribeAudio } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
@@ -10,6 +10,41 @@ import { $, dateKey, escapeHtml, round2 } from "./util.js";
 import { view } from "./view.js";
 
 const SpeechRecognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+
+/** 是否运行在 Tauri 打包的移动端（Android / iOS WebView） */
+function isMobileShell() {
+  return Boolean(globalThis.__TAURI__) && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+/** 麦克风失败的中文可操作提示：区分权限 / 无设备 / 被占用 */
+function microphoneErrorText(error) {
+  switch (error?.name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return isMobileShell()
+        ? "系统未授权麦克风：请到「设置 → 应用 → AI 记账 → 权限」中开启麦克风权限"
+        : "浏览器拒绝了麦克风权限，请在地址栏权限设置中允许后重试";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "没有检测到可用的麦克风设备";
+    case "NotReadableError":
+    case "AbortError":
+      return "麦克风被其他应用占用，请关闭后重试";
+    case "TimeoutError":
+      return "等待麦克风授权超时：请确认系统权限弹窗是否被拦截，或到系统设置里手动开启麦克风";
+    default:
+      return `无法访问麦克风：${error?.message ?? error}`;
+  }
+}
+
+/** 等待 getUserMedia 的结果，带超时（避免 Android 授权框挂起时长按状态锁死） */
+function getAudioStream(timeoutMs = 8000) {
+  const pending = navigator.mediaDevices.getUserMedia({ audio: true });
+  const timeout = new Promise((_, reject) => {
+    window.setTimeout(() => reject(Object.assign(new Error("麦克风授权超时"), { name: "TimeoutError" })), timeoutMs);
+  });
+  return Promise.race([pending, timeout]);
+}
 
 export function bindComposer({ onNeedSettings } = {}) {
   const form = $("#composer");
@@ -58,11 +93,15 @@ export function bindComposer({ onNeedSettings } = {}) {
     action.disabled = true;
     const loading = toast("AI 正在解析…");
     try {
-      const records = await parseAccounting(text, getSettings());
+      const { records, skipped } = await parseAccounting(text, getSettings());
       if (!records.length) {
-        toast("没能识别出账单，换个说法试试", "error");
+        toast(
+          skipped ? `识别到 ${skipped} 条，但都缺少金额或日期` : "没能识别出账单，换个说法试试",
+          "error",
+        );
         return;
       }
+      if (skipped) toast(`另有 ${skipped} 条缺少金额或日期，已跳过`, "warning");
       input.value = "";
       input.blur();
       setSendMode(false);
@@ -98,12 +137,14 @@ export function bindComposer({ onNeedSettings } = {}) {
 
   /** 方案 A：Web SpeechRecognition（浏览器 / 部分 WebView） */
   function startWebSpeech() {
-    if (!SpeechRecognition) return null;
+    if (!SpeechRecognition) return { engine: null };
     const instance = new SpeechRecognition();
     instance.lang = "zh-CN";
     instance.interimResults = true;
     instance.continuous = false;
     let transcript = "";
+    /** 是否已就本次识别给出过错误提示，避免权限失败时叠加多条 toast */
+    let reported = false;
 
     instance.onresult = (event) => {
       let text = "";
@@ -113,7 +154,16 @@ export function bindComposer({ onNeedSettings } = {}) {
     };
     instance.onerror = (event) => {
       hideWave();
-      if (event.error !== "aborted" && event.error !== "no-speech") {
+      if (event.error === "aborted" || event.error === "no-speech") return;
+      reported = true;
+      // not-allowed / service-not-allowed 都是权限或不可用，统一给可操作提示
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        toast(microphoneErrorText({ name: "NotAllowedError" }), "error");
+      } else if (event.error === "audio-capture") {
+        toast("没有检测到可用的麦克风设备", "error");
+      } else if (event.error === "network") {
+        toast("语音识别网络异常，请改用系统语音输入", "error");
+      } else {
         toast(`语音识别失败：${event.error}`, "error");
       }
     };
@@ -126,22 +176,22 @@ export function bindComposer({ onNeedSettings } = {}) {
       instance.start();
     } catch (error) {
       console.warn("[composer] 语音识别启动失败", error);
-      return null;
+      return { engine: null, errored: reported };
     }
-    return instance;
+    return { engine: instance };
   }
 
   /** 方案 B：MediaRecorder + 后端 Whisper（Android / 桌面 Tauri WebView） */
   async function startMediaRecorder() {
     const SR = globalThis.MediaRecorder;
-    if (!SR) return null;
+    if (!SR || !navigator.mediaDevices?.getUserMedia) return { engine: null };
     try {
-      // 请求麦克风权限
-      recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 请求麦克风权限：Android 上由 Wry 的 WebChromeClient 触发系统授权框
+      recorderStream = await getAudioStream();
     } catch (error) {
       console.error("[composer] 麦克风权限被拒绝或不可用:", error);
-      toast(`无法访问麦克风：${error?.message ?? error}`, "error");
-      return null;
+      toast(microphoneErrorText(error), "error");
+      return { engine: null, errored: true };
     }
     const mime = pickRecorderMime();
     recordedChunks = [];
@@ -157,9 +207,13 @@ export function bindComposer({ onNeedSettings } = {}) {
       instance.start(250);
     } catch (error) {
       console.warn("[composer] MediaRecorder 启动失败", error);
-      return null;
+      if (recorderStream) {
+        recorderStream.getTracks().forEach((track) => track.stop());
+        recorderStream = null;
+      }
+      return { engine: null, errored: true };
     }
-    return instance;
+    return { engine: instance };
   }
 
   function pickRecorderMime() {
@@ -214,19 +268,30 @@ export function bindComposer({ onNeedSettings } = {}) {
   }
 
   async function startVoice() {
-    // 优先 MediaRecorder + Whisper（更稳定），然后 WebSpeech
-    if (hasBackend() && typeof MediaRecorder !== "undefined") {
-      const instance = await startMediaRecorder();
-      if (instance) return { kind: "media", instance };
-    }
+    // 顺序：先试浏览器原生识别（最快、无需 API Key），失败再走录音 + 后端 Whisper。
+    // 关键：一旦某个引擎已经给出错误提示，就不再叠加第二次尝试，
+    // 否则 Android WebView 上会出现「无法访问麦克风 + 语音识别失败」两条 toast。
     if (SpeechRecognition) {
-      const instance = startWebSpeech();
-      if (instance) return { kind: "web", instance };
+      const result = startWebSpeech();
+      if (result.engine) return { kind: "web", instance: result.engine, errored: false };
+      if (result.errored) return null;
     }
-    if (!SpeechRecognition && typeof MediaRecorder === "undefined") {
-      toast("当前环境不支持语音录入，请用键盘输入", "error");
-    } else if (!hasBackend()) {
-      toast("浏览器预览下不支持语音转文字，请用键盘输入", "error");
+
+    const backend = hasBackend();
+    const recorderAvailable = typeof MediaRecorder !== "undefined";
+    if (backend && recorderAvailable) {
+      const result = await startMediaRecorder();
+      if (result.engine) return { kind: "media", instance: result.engine, errored: false };
+      if (result.errored) return null;
+    }
+
+    if (!SpeechRecognition && !recorderAvailable) {
+      toast("当前设备不支持语音录入，请用键盘输入", "error");
+    } else if (!backend) {
+      toast("语音转文字需要连接 AI 后端，请先在设置里配置 API Key", "error");
+      onNeedSettings?.();
+    } else {
+      toast("语音录入启动失败，请重试或改用键盘输入", "error");
     }
     return null;
   }

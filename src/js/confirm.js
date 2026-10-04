@@ -4,7 +4,7 @@ import { openRecordEditor } from "./editor.js";
 import { attachLongPress, attachSwipeReveal } from "./gesture.js";
 import { addRecords, categoryColor } from "./store.js";
 import { closeLayer, flyChip, haptic, openLayer, pulseCell, toast } from "./ui.js";
-import { $, dateKey, el, formatMoney, fromKey, fullDateLabel, yuan } from "./util.js";
+import { $, dateKey, el, formatMoney, fromKey, fullDateLabel, normalizeDateKey, parseAmount, yuan } from "./util.js";
 
 let pending = [];
 let afterCommit = null;
@@ -27,16 +27,15 @@ function closeConfirm() {
 }
 
 function normalize(raw, index) {
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.date ?? ""))
-    ? String(raw.date)
-    : dateKey(new Date());
+  // 日期认不出来才落到今天；金额认不出来按 0 处理（确认页里还能手改）
+  const createdAt = Number(raw?.createdAt);
   return {
     id: String(raw?.id ?? `pending-${Date.now().toString(36)}-${index}`),
-    date,
+    date: normalizeDateKey(raw?.date) ?? dateKey(new Date()),
     item: String(raw?.item ?? "未命名"),
     category: String(raw?.category ?? "其他"),
-    amount: Math.abs(Number(raw?.amount) || 0),
-    createdAt: Number(raw?.createdAt ?? Date.now() + index),
+    amount: parseAmount(raw?.amount) ?? 0,
+    createdAt: Number.isFinite(createdAt) ? createdAt : Date.now() + index,
   };
 }
 
@@ -146,7 +145,7 @@ function commit() {
 
   haptic([10, 30, 10]);
   const notify = afterCommit;
-  addRecords(list);
+  const saved = addRecords(list);
   closeConfirm();
   notify?.();
 
@@ -162,7 +161,12 @@ function commit() {
     }
   }, landing + 40);
 
-  toast(`已入账 ${list.length} 笔`, "ok");
+  // toast 用真正落库的条数，别在有条目被校验拦下时还报「已入账 N 笔」
+  const missing = list.length - saved.length;
+  toast(
+    missing ? `已入账 ${saved.length} 笔，${missing} 条缺少金额或日期` : `已入账 ${list.length} 笔`,
+    missing ? "warning" : "ok",
+  );
 }
 
 /* ---------------- 一次性事件绑定 ---------------- */

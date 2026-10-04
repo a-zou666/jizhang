@@ -20,14 +20,14 @@ export function closeLayer(node) {
 }
 
 /* ---------------- Toast ---------------- */
-export function toast(message, type = "") {
+export function toast(message, type = "", duration = 2200) {
   const root = $("#toastRoot");
   const node = el("div", { class: `toast${type ? ` is-${type}` : ""}`, text: message });
   root.append(node);
   window.setTimeout(() => {
     node.classList.add("is-leaving");
     window.setTimeout(() => node.remove(), SHEET_MS + 60);
-  }, 2200);
+  }, duration);
   return node;
 }
 
@@ -135,7 +135,7 @@ export function promptText({ title, value = "", placeholder = "", inputMode = "t
 export function confirmDialog({ title, message, confirmLabel = "确定", danger = false, onConfirm }) {
   openModal(
     `<p class="modal-title">${escapeHtml(title)}</p>
-     ${message ? `<p class="t-footnote" style="text-align:center;color:var(--color-text-secondary);margin-bottom:var(--spacing-md)">${escapeHtml(message)}</p>` : ""}
+     ${message ? `<p class="t-footnote" style="text-align:center;color:var(--text-secondary);margin-bottom:var(--space-4)">${escapeHtml(message)}</p>` : ""}
      <div class="modal-actions">
        <button class="ghost-btn" id="modalCancel" type="button">取消</button>
        <button class="primary-btn primary-btn--compact" id="modalConfirm" type="button"

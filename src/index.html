@@ -21,66 +21,69 @@
         <section class="page is-active" data-page="home" id="page-home" aria-label="首页">
           <header class="home-header">
             <div class="home-header__row">
-              <div class="home-header__title-group">
-                <p class="home-header__greet" id="homeGreet">你好呀</p>
-                <h1
-                  class="home-title t-hero"
-                  id="monthTitle"
-                  role="button"
-                  tabindex="0"
-                  aria-label="切换月份"
-                >—</h1>
-              </div>
+              <p class="home-header__greet" id="homeGreet">你好呀</p>
               <button class="today-btn" id="todayBtn" type="button">
-                <span data-icon="calendarToday" aria-hidden="true"></span>今天
+                <span data-icon="calendarToday" aria-hidden="true"></span>
+                <span class="today-btn__text">今天</span>
               </button>
             </div>
+          </header>
 
-            <!-- 月进度 -->
-            <div class="month-progress card" id="monthProgress">
-              <div class="month-progress__row">
-                <div class="month-progress__col">
-                  <p class="month-progress__caption">本月支出</p>
-                  <div class="month-progress__meta">
-                    <span class="month-progress__spent t-title1 t-numeric" id="monthSpent">¥0</span>
-                    <span class="month-progress__budget t-caption t-numeric" id="monthBudget">/ ¥5,000</span>
-                  </div>
-                </div>
-                <div class="month-progress__ratio" id="monthRatio">0%</div>
+          <div class="page-body" id="homeBody">
+            <!-- 月进度：从头部卡片改为整行概览，压缩纵向空间 -->
+            <section class="spend-overview" id="monthProgress" aria-label="本月支出概览">
+              <div class="spend-overview__top">
+                <span class="spend-overview__caption">本月支出</span>
+                <span class="spend-overview__ratio" id="monthRatio">0%</span>
               </div>
+              <p class="spend-overview__amount">
+                <span class="spend-overview__spent t-numeric" id="monthSpent">¥0</span>
+                <span class="spend-overview__budget t-numeric" id="monthBudget">/ ¥5,000</span>
+              </p>
               <div
-                class="month-progress__track"
+                class="spend-overview__track"
                 id="progressTrack"
                 role="progressbar"
                 aria-valuemin="0"
                 aria-valuemax="100"
                 aria-valuenow="0"
               >
-                <div class="month-progress__fill" id="progressFill"></div>
+                <div class="spend-overview__fill" id="progressFill"></div>
               </div>
-              <p class="month-progress__hint t-footnote" id="monthHint">设定一个预算，跟踪每月支出</p>
-            </div>
-          </header>
+              <p class="spend-overview__hint t-footnote" id="monthHint">设定一个预算，跟踪每月支出</p>
+            </section>
 
-          <div class="page-body" id="homeBody">
             <!-- 日历网格 -->
-            <div class="calendar-card card" id="calendarCard">
+            <section class="panel calendar-panel glass-sheen" id="calendarCard">
+              <header class="panel__head">
+                <h2
+                  class="panel__title t-title3 month-btn"
+                  id="monthTitle"
+                  role="button"
+                  tabindex="0"
+                  aria-label="切换月份"
+                >—</h2>
+                <span class="panel__count t-footnote" id="calendarCount"></span>
+              </header>
+              <p class="calendar-panel__summary t-footnote">
+                <span>本月支出 <b class="t-numeric" id="calendarSpent">¥0</b></span>
+              </p>
               <div class="weekday-row" id="weekdayRow" aria-hidden="true"></div>
               <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="记账日历"></div>
-            </div>
+            </section>
 
             <!-- 明细列表 -->
-            <div class="detail-card card">
-              <div class="detail-card__head">
-                <h2 class="detail-card__title t-title3" id="detailTitle">今日明细</h2>
-                <span class="detail-card__count t-footnote" id="detailCount"></span>
-              </div>
+            <section class="panel detail-panel glass-sheen">
+              <header class="panel__head">
+                <h2 class="panel__title t-title3" id="detailTitle">今日明细</h2>
+                <span class="panel__count t-footnote" id="detailCount"></span>
+              </header>
               <ul class="detail-list" id="detailList"></ul>
               <div class="detail-total">
                 <span class="detail-total__label">合计</span>
                 <span class="detail-total__value t-numeric" id="detailTotal">¥0</span>
               </div>
-            </div>
+            </section>
           </div>
         </section>
 
@@ -92,7 +95,9 @@
             <div class="settings-header__row">
               <h1 class="t-hero">设置</h1>
             </div>
-            <p class="settings-header__hint">把所有账号信息留在本地，仅在你主动调用时才会发送到 API。</p>
+            <p class="settings-header__hint">
+              账号信息只保存在本机，仅在你主动调用时才会发送到 API。
+            </p>
           </header>
 
           <div class="page-body">
@@ -149,13 +154,8 @@
                 </div>
               </div>
 
-              <button class="settings-row is-button" id="testBtn" type="button">
-                <span
-                  class="settings-row__label"
-                  id="testBtnLabel"
-                  style="color: var(--color-primary-dark); font-weight: 600"
-                  >测试连接</span
-                >
+              <button class="settings-row is-button settings-row--action" id="testBtn" type="button">
+                <span class="settings-row__label" id="testBtnLabel">测试连接</span>
                 <span class="settings-row__value" id="testValue"></span>
               </button>
               <div class="test-result" id="testResult" role="status" aria-live="polite"></div>
@@ -180,6 +180,15 @@
               </button>
             </div>
 
+            <p class="settings-group-label">外观（每个界面单独配置）</p>
+            <div class="settings-group" id="appearanceGroup">
+              <button class="settings-row is-button" id="rowAppearance" type="button">
+                <span class="settings-row__label">界面外观</span>
+                <span class="settings-row__value" id="appearanceValue">逐个界面调整</span>
+                <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+              </button>
+            </div>
+
             <p class="settings-group-label">数据</p>
             <div class="settings-group">
               <button class="settings-row is-button" id="rowExport" type="button">
@@ -198,24 +207,37 @@
       </div>
 
       <!-- ================================================================
-           八、底部悬浮输入条
+           八、底部停靠区：输入条 + 导航栏
            ================================================================ -->
-      <form class="composer" id="composer" autocomplete="off" novalidate>
-        <button class="composer__plus" id="composerPlus" type="button" aria-label="快捷分类">
-          <span data-icon="plus" aria-hidden="true"></span>
-        </button>
-        <input
-          class="composer__input"
-          id="composerInput"
-          type="text"
-          enterkeyhint="send"
-          placeholder="说点什么，比如“昨天买鼠标花了120”"
-          aria-label="记账输入"
-        />
-        <button class="composer__action" id="composerAction" type="button" aria-label="语音输入">
-          <span data-icon="mic" aria-hidden="true"></span>
-        </button>
-      </form>
+      <div class="dock" id="dock">
+        <form class="composer" id="composer" autocomplete="off" novalidate>
+          <button class="composer__plus" id="composerPlus" type="button" aria-label="快捷分类">
+            <span data-icon="plus" aria-hidden="true"></span>
+          </button>
+          <input
+            class="composer__input"
+            id="composerInput"
+            type="text"
+            enterkeyhint="send"
+            placeholder="说点什么，比如“昨天买鼠标花了120”"
+            aria-label="记账输入"
+          />
+          <button class="composer__action" id="composerAction" type="button" aria-label="语音输入">
+            <span data-icon="mic" aria-hidden="true"></span>
+          </button>
+        </form>
+
+        <nav class="tabbar" id="tabbar" aria-label="主导航">
+          <button class="tabbar__item is-active" data-tab="home" type="button">
+            <span class="tabbar__icon" data-tab-icon="home" aria-hidden="true"></span>
+            <span class="tabbar__label">首页</span>
+          </button>
+          <button class="tabbar__item" data-tab="settings" type="button">
+            <span class="tabbar__icon" data-tab-icon="settings" aria-hidden="true"></span>
+            <span class="tabbar__label">设置</span>
+          </button>
+        </nav>
+      </div>
 
       <!-- 长按语音波纹 -->
       <div class="voice-wave" id="voiceWave" aria-hidden="true">
@@ -227,20 +249,6 @@
           <p class="t-caption" id="voiceHint">松手转文字</p>
         </div>
       </div>
-
-      <!-- ================================================================
-           六、底部导航栏
-           ================================================================ -->
-      <nav class="tabbar" id="tabbar" aria-label="主导航">
-        <button class="tabbar__item is-active" data-tab="home" type="button">
-          <span class="tabbar__icon" data-tab-icon="home" aria-hidden="true"></span>
-          <span>首页</span>
-        </button>
-        <button class="tabbar__item" data-tab="settings" type="button">
-          <span class="tabbar__icon" data-tab-icon="settings" aria-hidden="true"></span>
-          <span>设置</span>
-        </button>
-      </nav>
     </div>
 
     <!-- ==================================================================

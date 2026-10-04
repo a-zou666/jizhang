@@ -1,6 +1,7 @@
 /** 前后端桥接：Tauri invoke 封装 + 非 Tauri 环境兜底 */
 
 import { mockParse, mockTestConnection } from "./mock.js";
+import { normalizeDateKey, parseAmount } from "./util.js";
 
 const tauriInvoke = () => {
   const api = globalThis.__TAURI__;
@@ -16,37 +17,38 @@ async function invoke(command, args) {
 }
 
 function normalizeRaw(raw, index) {
-  const amount = Number(raw?.amount);
   return {
     id: raw?.id ?? `ai-${Date.now().toString(36)}-${index}`,
-    date: String(raw?.date ?? "").slice(0, 10),
+    date: normalizeDateKey(raw?.date) ?? "",
     item: String(raw?.item ?? "未命名"),
     category: String(raw?.category ?? "其他"),
-    amount: Number.isFinite(amount) ? Math.abs(amount) : 0,
+    amount: parseAmount(raw?.amount) ?? 0,
     createdAt: Date.now() + index,
   };
 }
 
 /**
  * 调用大模型解析自然语言账单
- * @returns {Promise<Array<{id,date,item,category,amount,createdAt}>>}
+ *
+ * 归一化（日期 → YYYY-MM-DD、金额 → 数字）在 normalizeRaw 里做，
+ * 这里只统计「救不回来」的条目数并回传，避免解析结果被静默丢掉。
+ * @returns {Promise<{records: Array<{id,date,item,category,amount,createdAt}>, skipped: number}>}
  */
 export async function parseAccounting(text, settings) {
-  if (!hasBackend()) {
-    return mockParse(text);
-  }
-  const raw = await invoke("process_accounting", {
-    text,
-    protocol: settings.protocol,
-    baseUrl: settings.baseUrl,
-    apiKey: settings.apiKey,
-    apiModel: settings.model,
-    categories: settings.categories,
-  });
-  const list = Array.isArray(raw) ? raw : [];
-  return list
-    .map(normalizeRaw)
-    .filter((record) => record.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(record.date));
+  const list = hasBackend()
+    ? await invoke("process_accounting", {
+        text,
+        protocol: settings.protocol,
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+        apiModel: settings.model,
+        categories: settings.categories,
+      })
+    : mockParse(text);
+
+  const normalized = (Array.isArray(list) ? list : []).map(normalizeRaw);
+  const records = normalized.filter((record) => record.amount > 0 && record.date);
+  return { records, skipped: normalized.length - records.length };
 }
 
 /**

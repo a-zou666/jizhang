@@ -40,8 +40,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Static checks (syntax + smoke test)
+        run: npm run check
+
       - name: Initialize Android project
         run: npm run tauri android init
+
+      # 麦克风权限必须在清单里声明，否则 Android 会直接拒绝录音请求
+      # （用户看不到授权弹窗，WebView 把 getUserMedia 判为 NotAllowedError）
+      - name: Inject microphone permission into AndroidManifest
+        run: node scripts/inject-android-permissions.mjs
+
+      # 再校验一遍：权限确实已声明，且排在 <application> 之前
+      - name: Verify microphone permission
+        run: |
+          node scripts/inject-android-permissions.mjs --check
+          grep -n "uses-permission" src-tauri/gen/android/app/src/main/AndroidManifest.xml
 
       - name: Build APK (Unsigned)
         run: npm run tauri android build

@@ -1,5 +1,14 @@
 /** 十、设置页 */
 
+import {
+  ACCENT_OPTIONS,
+  DENSITY_OPTIONS,
+  GLASS_OPTIONS,
+  RADIUS_OPTIONS,
+  VIEWS,
+  VIEW_KEYS,
+  describeAppearance,
+} from "./appearance.js";
 import { listModels, testConnection } from "./bridge.js";
 import { hydrateIcons } from "./icons.js";
 import {
@@ -9,10 +18,13 @@ import {
   categoryColor,
   clearRecords,
   exportPayload,
+  getAppearance,
   getRecords,
   getSettings,
   removeCategory,
+  resetViewAppearance,
   setSettings,
+  setViewAppearance,
 } from "./store.js";
 import { closeModal, confirmDialog, openModal, pickOption, promptText, toast } from "./ui.js";
 import { $, dateKey, el, round2, yuan } from "./util.js";
@@ -43,6 +55,11 @@ export function renderSettings() {
   $("#weekStartValue").textContent = settings.weekStart === 0 ? "周日" : "周一";
   $("#budgetValue").textContent = yuan(settings.budget);
   $("#categoryValue").textContent = `${settings.categories.length} 个分类`;
+
+  const appearanceValue = $("#appearanceValue");
+  if (appearanceValue) {
+    appearanceValue.textContent = `${VIEW_KEYS.length} 个界面可调`;
+  }
 }
 
 /** 输入框同步：正在编辑的输入框不打断 */
@@ -189,6 +206,9 @@ export function bindSettings() {
   /* 分类管理 */
   $("#rowCategories").addEventListener("click", openCategoryManager);
 
+  /* 外观：每个界面单独配置 */
+  $("#rowAppearance").addEventListener("click", openAppearanceEditor);
+
   /* 数据导出 */
   $("#rowExport").addEventListener("click", exportData);
 
@@ -209,12 +229,160 @@ export function bindSettings() {
   });
 }
 
+/* ---------------- 外观配置弹窗（每个界面独立） ---------------- */
+function openAppearanceEditor() {
+  let current = "home";
+
+  openModal(
+    `<p class="modal-title">界面外观</p>
+     <div class="appearance-tabs" id="apTabs"></div>
+     <div class="appearance-body" id="apBody"></div>
+     <div class="modal-actions">
+       <button class="ghost-btn" id="apResetView" type="button">恢复此界面</button>
+       <button class="primary-btn primary-btn--compact" id="apDone" type="button">完成</button>
+     </div>`,
+    {
+      onMount: (panel) => {
+        const tabsHolder = panel.querySelector("#apTabs");
+        const body = panel.querySelector("#apBody");
+
+        tabsHolder.replaceChildren(
+          ...VIEW_KEYS.map((key) =>
+            el(
+              "button",
+              {
+                class: `appearance-tab${key === current ? " is-active" : ""}`,
+                type: "button",
+                dataset: { view: key },
+              },
+              [
+                el("span", { class: "appearance-tab__label", text: VIEWS[key].label }),
+                el("span", { class: "appearance-tab__desc", text: VIEWS[key].desc }),
+              ],
+            ),
+          ),
+        );
+
+        tabsHolder.addEventListener("click", (event) => {
+          const button = event.target.closest(".appearance-tab");
+          if (!button || button.dataset.view === current) return;
+          current = button.dataset.view;
+          for (const node of tabsHolder.querySelectorAll(".appearance-tab")) {
+            node.classList.toggle("is-active", node.dataset.view === current);
+          }
+          paint();
+        });
+
+        /** 单选控件组 */
+        const choiceField = ({ caption, value, options, onPick }) => {
+          const field = el("div", { class: "appearance-field" });
+          field.append(el("p", { class: "appearance-field__caption" }, [el("span", { text: caption })]));
+          const holder = el("div", { class: "appearance-choices" });
+          for (const option of options) {
+            const button = el("button", {
+              class: `appearance-choice${option.value === value ? " is-active" : ""}`,
+              type: "button",
+              dataset: { value: option.value },
+              text: option.label,
+              title: option.desc ?? "",
+            });
+            button.addEventListener("click", () => {
+              onPick(option.value);
+              paint();
+            });
+            holder.append(button);
+          }
+          field.append(holder);
+          return field;
+        };
+
+        /** 主题色色板 */
+        const accentField = (value, onPick) => {
+          const field = el("div", { class: "appearance-field" });
+          field.append(
+            el("p", { class: "appearance-field__caption" }, [el("span", { text: "主题色" })]),
+          );
+          const holder = el("div", { class: "appearance-swatches" });
+          for (const option of ACCENT_OPTIONS) {
+            const button = el("button", {
+              class: `appearance-swatch${option.value === value ? " is-active" : ""}`,
+              type: "button",
+              dataset: { value: option.value },
+              "aria-label": option.label,
+              title: option.label,
+            });
+            button.style.background = option.value;
+            button.addEventListener("click", () => {
+              onPick(option.value);
+              paint();
+            });
+            holder.append(button);
+          }
+          field.append(holder);
+          return field;
+        };
+
+        function paint() {
+          const config = getAppearance()[current];
+          const field = el("div", { class: "appearance-field" });
+          field.append(
+            el("p", { class: "appearance-field__caption" }, [
+              el("span", { text: "当前方案" }),
+              el("span", { class: "appearance-field__value", text: describeAppearance(config) }),
+            ]),
+          );
+
+          body.replaceChildren(
+            field,
+            accentField(config.accent, (accent) => setViewAppearance(current, { accent })),
+            choiceField({
+              caption: "玻璃效果",
+              value: config.glass,
+              options: GLASS_OPTIONS,
+              onPick: (glass) => setViewAppearance(current, { glass }),
+            }),
+            choiceField({
+              caption: "圆角",
+              value: config.radius,
+              options: RADIUS_OPTIONS,
+              onPick: (radius) => setViewAppearance(current, { radius }),
+            }),
+            choiceField({
+              caption: "密度",
+              value: config.density,
+              options: DENSITY_OPTIONS,
+              onPick: (density) => setViewAppearance(current, { density }),
+            }),
+            el("p", {
+              class: "t-footnote",
+              text: "修改立即生效，并只作用于当前选中的界面；四个界面互不影响。",
+            }),
+          );
+        }
+
+        panel.querySelector("#apResetView").addEventListener("click", () => {
+          resetViewAppearance(current);
+          paint();
+          toast(`已恢复「${VIEWS[current].label}」默认外观`, "ok");
+        });
+
+        panel.querySelector("#apDone").addEventListener("click", closeModal);
+
+        paint();
+      },
+      onClose: () => {
+        renderSettings();
+      },
+    },
+  );
+}
+
 /* ---------------- 分类管理弹窗 ---------------- */
 function openCategoryManager() {
   openModal(
     `<p class="modal-title">分类管理</p>
      <div id="catList"></div>
-     <div class="settings-input-row" style="margin-top:var(--spacing-md)">
+     <div class="settings-input-row" style="margin-top:var(--space-4)">
        <input class="settings-input" id="catNew" type="text" placeholder="新分类名称" maxlength="12" />
        <button class="show-key-btn" id="catAdd" type="button">添加</button>
      </div>

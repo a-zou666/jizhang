@@ -1,8 +1,11 @@
 /** 应用状态：账单记录 + 设置（localStorage 持久化） */
 
-import { dateKey, monthKey, round2, today, uid } from "./util.js";
+import { DEFAULT_APPEARANCE, sanitizeAppearance } from "./appearance.js";
+import { dateKey, normalizeDateKey, monthKey, parseAmount, round2, today, uid } from "./util.js";
 
 const STORAGE_KEY = "ai-ledger/v1";
+/** 本地数据损坏读不出来时，先把原始内容备份到这里，避免被下一次写入覆盖掉 */
+const RECOVERY_KEY = "ai-ledger/v1.recovered";
 const PALETTE_SIZE = 6;
 
 export const DEFAULT_CATEGORIES = ["餐饮", "交通", "数码", "日用", "娱乐", "其他"];
@@ -39,64 +42,144 @@ const DEFAULT_STATE = () => ({
     budget: 5000,
     categories: [...DEFAULT_CATEGORIES],
   },
+  /** 每个视图独立的外观配置（首页 / 设置页 / 弹窗 / 输入条） */
+  appearance: DEFAULT_APPEARANCE(),
 });
 
 let state = DEFAULT_STATE();
 const listeners = new Set();
 
+/**
+ * 最近一次存储故障（null 表示正常）。
+ * 记账应用最怕「以为存上了、其实没存」：写入失败（配额满 / 隐私模式）、
+ * 本地数据损坏解析不了、部分记录格式坏掉被跳过，都必须让用户看见。
+ */
+let storageProblem = null;
+const storageListeners = new Set();
+
+/**
+ * 订阅存储故障。`handler` 收到故障对象，恢复正常时收到 `null`。
+ * 注册时会**立刻**用当前状态回调一次，所以 `load()` 阶段就发生的读故障也不会漏掉。
+ * 故障对象形如：`{ kind: "write" | "read" | "dropped", detail?, backedUp?, dropped? }`
+ */
+export function onStorageError(handler) {
+  storageListeners.add(handler);
+  handler(storageProblem);
+  return () => storageListeners.delete(handler);
+}
+
+export const getStorageProblem = () => storageProblem;
+
+function reportStorage(problem) {
+  const before = `${storageProblem?.kind ?? ""}|${storageProblem?.detail ?? ""}|${storageProblem?.dropped ?? ""}`;
+  const after = `${problem?.kind ?? ""}|${problem?.detail ?? ""}|${problem?.dropped ?? ""}`;
+  storageProblem = problem;
+  if (before !== after) storageListeners.forEach((listener) => listener(problem));
+}
+
 /* ---------------- 持久化 ---------------- */
 function sanitizeRecord(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const amount = Number(raw.amount);
-  if (!Number.isFinite(amount)) return null;
-  const date = String(raw.date ?? "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const amount = parseAmount(raw.amount);
+  if (amount === null) return null;
+  const date = normalizeDateKey(raw.date);
+  if (!date) return null;
+  const createdAt = Number(raw.createdAt);
   return {
     id: String(raw.id ?? uid()),
     date,
     item: String(raw.item ?? "未命名"),
     category: String(raw.category ?? "其他"),
     amount: round2(Math.abs(amount)),
-    createdAt: Number(raw.createdAt ?? Date.now()),
+    createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+  };
+}
+
+/**
+ * 设置项收口：load()（读本地）与 replaceAll()（导入 JSON）共用。
+ * 以前导入数据是直接 Object.assign 进 state，非法值（weekStart: "x"、
+ * 分类里混进对象等）会绕过校验写进运行态，这里统一按白名单重建。
+ */
+function sanitizeSettings(raw, base) {
+  if (!raw || typeof raw !== "object") return { ...base };
+  const budget = Number(raw.budget);
+  const categories = Array.isArray(raw.categories)
+    ? [
+        ...new Set(
+          raw.categories
+            .filter((name) => typeof name === "string")
+            .map((name) => name.trim())
+            .filter(Boolean),
+        ),
+      ].slice(0, 40)
+    : [];
+  return {
+    protocol: PROTOCOL_PRESETS[raw.protocol] ? raw.protocol : base.protocol,
+    baseUrl: String(raw.baseUrl ?? "").trim(),
+    apiKey: String(raw.apiKey ?? ""),
+    model: String(raw.model ?? "").trim(),
+    weekStart: Number(raw.weekStart) === 0 ? 0 : 1,
+    budget: Number.isFinite(budget) ? Math.max(0, round2(budget)) : base.budget,
+    categories: categories.length ? categories : [...base.categories],
   };
 }
 
 export function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
+    // 读得出来就是好的：上一次写入失败（如果发生在本会话之前）不再算数
+    if (!raw) {
+      if (storageProblem?.kind !== "write") reportStorage(null);
+      return;
+    }
     const parsed = JSON.parse(raw);
     const next = DEFAULT_STATE();
+    let dropped = 0;
     if (Array.isArray(parsed?.records)) {
       next.records = parsed.records.map(sanitizeRecord).filter(Boolean);
+      dropped = parsed.records.length - next.records.length;
     }
-    const settings = parsed?.settings;
-    if (settings && typeof settings === "object") {
-      Object.assign(next.settings, {
-        protocol: PROTOCOL_PRESETS[settings.protocol] ? settings.protocol : "openai-compatible",
-        baseUrl: String(settings.baseUrl ?? ""),
-        apiKey: String(settings.apiKey ?? ""),
-        model: String(settings.model ?? ""),
-        weekStart: Number(settings.weekStart) === 0 ? 0 : 1,
-        budget: Number.isFinite(Number(settings.budget)) ? round2(Number(settings.budget)) : 5000,
-        categories:
-          Array.isArray(settings.categories) && settings.categories.length
-            ? settings.categories.map((name) => String(name)).filter(Boolean)
-            : [...DEFAULT_CATEGORIES],
-      });
-    }
+    next.settings = sanitizeSettings(parsed?.settings, next.settings);
+    next.appearance = sanitizeAppearance(parsed?.appearance);
     state = next;
+    if (dropped > 0) reportStorage({ kind: "dropped", dropped });
+    else if (storageProblem?.kind !== "write") reportStorage(null);
   } catch (error) {
     console.warn("[store] 读取本地数据失败，使用默认状态", error);
+    let raw = null;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch (readError) {
+      console.warn("[store] 连原始内容也读不出来", readError);
+    }
+    // 关键：先把读不出来的原始内容另存一份，再重置 ——
+    // 否则下一次写入就会把这堆字节永久覆盖掉，数据再也没机会救回来。
+    let backedUp = false;
+    if (raw) {
+      try {
+        localStorage.setItem(RECOVERY_KEY, raw);
+        backedUp = true;
+      } catch (backupError) {
+        console.warn("[store] 备份损坏的本地数据失败", backupError);
+      }
+    }
     state = DEFAULT_STATE();
+    reportStorage({
+      kind: "read",
+      detail: String(error?.message ?? error),
+      backedUp,
+      recoverable: Boolean(raw),
+    });
   }
 }
 
 function persist() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    reportStorage(null); // 之前失败过的话，让用户知道已经恢复正常
   } catch (error) {
     console.warn("[store] 写入本地数据失败", error);
+    reportStorage({ kind: "write", detail: String(error?.message ?? error) });
   }
 }
 
@@ -225,6 +308,32 @@ export function setSettings(patch) {
   commit("settings");
 }
 
+/* ---------------- 外观（每个视图独立配置） ---------------- */
+export const getAppearance = () => state.appearance;
+
+/** 只更新某个视图的外观，其他视图不受影响 */
+export function setViewAppearance(viewKey, patch) {
+  const current = state.appearance[viewKey];
+  if (!current) return;
+  state.appearance = {
+    ...state.appearance,
+    [viewKey]: sanitizeAppearance({ [viewKey]: { ...current, ...patch } })[viewKey],
+  };
+  commit("appearance");
+}
+
+export function resetViewAppearance(viewKey) {
+  const fresh = DEFAULT_APPEARANCE();
+  if (!fresh[viewKey]) return;
+  state.appearance = { ...state.appearance, [viewKey]: fresh[viewKey] };
+  commit("appearance");
+}
+
+export function resetAllAppearance() {
+  state.appearance = DEFAULT_APPEARANCE();
+  commit("appearance");
+}
+
 export function addCategory(name) {
   const clean = String(name ?? "").trim();
   if (!clean || state.settings.categories.includes(clean)) return false;
@@ -249,6 +358,7 @@ export function exportPayload() {
     version: "0.1.0",
     exportedAt: new Date().toISOString(),
     settings: { ...state.settings, apiKey: state.settings.apiKey ? "***" : "" },
+    appearance: JSON.parse(JSON.stringify(state.appearance)),
     records: [...state.records].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
   };
 }
@@ -256,9 +366,9 @@ export function exportPayload() {
 export function replaceAll(next) {
   const fresh = DEFAULT_STATE();
   if (Array.isArray(next?.records)) fresh.records = next.records.map(sanitizeRecord).filter(Boolean);
-  if (next?.settings && typeof next.settings === "object") {
-    Object.assign(fresh.settings, next.settings);
-  }
+  // 导入的 JSON 也要走同一套校验，别让脏数据从这条路绕过 load()
+  fresh.settings = sanitizeSettings(next?.settings, fresh.settings);
+  if (next?.appearance) fresh.appearance = sanitizeAppearance(next.appearance);
   state = fresh;
   commit("all");
 }

@@ -83,6 +83,7 @@ export function hydrateIcons(root = document) {
   root.querySelectorAll("[data-icon]").forEach((node) => {
     const name = node.getAttribute("data-icon");
     const size = Number(node.getAttribute("data-icon-size")) || 24;
+    if (!ICONS[name]) console.warn(`[icons] 未知图标名：${name}（会渲染成空白）`);
     node.innerHTML = icon(name, { size });
   });
 }

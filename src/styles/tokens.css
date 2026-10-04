@@ -1,12 +1,10 @@
 /* ==========================================
-   AI 记账 · 全新设计系统
+   AI 记账 · 设计令牌
    明亮清爽 · 现代简洁
    ========================================== */
 
 :root {
-  /* ============ 颜色系统 - 明亮清爽 ============ */
-  
-  /* 主色调 - 清新蓝绿 */
+  /* ============ 主色调 - 清新蓝绿 ============ */
   --primary-50: #E0F7FF;
   --primary-100: #B3ECFF;
   --primary-200: #80E0FF;
@@ -17,151 +15,133 @@
   --primary-700: #0099D6;
   --primary-800: #0083BC;
   --primary-900: #005F91;
-  
-  /* 背景色 - 极致纯净 */
+
+  /* ============ 背景色 ============ */
   --bg-primary: #FFFFFF;
   --bg-secondary: #F8FAFB;
   --bg-tertiary: #F0F4F7;
   --bg-overlay: rgba(0, 0, 0, 0.02);
-  
-  /* 卡片和表面 */
+
+  /* ============ 卡片和表面 ============ */
   --surface-primary: #FFFFFF;
   --surface-secondary: #FAFBFC;
   --surface-elevated: #FFFFFF;
   --surface-hover: #F5F8FA;
   --surface-active: #EBF2F7;
-  
-  /* 文字颜色 - 高对比清晰 */
+
+  /* ============ 文字颜色 ============ */
   --text-primary: #0A0F1A;
   --text-secondary: #4A5568;
-  --text-tertiary: #718096;
-  --text-placeholder: #A0AEC0;
+  /* tertiary / placeholder 的取值按 WCAG 反推过：tertiary 在 --bg-tertiary
+     (#F0F4F7) 上 ≥4.5:1，placeholder 在其上 ≥3:1（提示文字，非正文）。
+     原值 #718096 / #A0AEC0 分别只有 4.02 / 2.26，实际偏灰看不清。 */
+  --text-tertiary: #637084;
+  --text-placeholder: #838E9D;
   --text-disabled: #CBD5E0;
   --text-inverse: #FFFFFF;
-  
-  /* 边框颜色 - 柔和分隔 */
+
+  /* ============ 边框颜色 ============ */
   --border-light: #E8ECF0;
   --border-default: #D4DCE5;
   --border-medium: #B8C5D3;
   --border-strong: #8B99AB;
-  
-  /* 语义色 - 清晰明确 */
-  --color-success: #00C896;
+
+  /* ============ 语义色 ============
+     success / danger 这两个「实色」既要当底色承载白字（左滑删除按钮、发送按钮），
+     又要当文字压在浅底上（金额、危险操作），所以按 WCAG 反推过：
+     原 #00C896 / #FF4757 白字只有 1.99 / 3.28，当文字压在白底上也只有 1.99 / 3.28。
+     *-bg / *-light 是浅色蒙版，保持不变。 */
+  --color-success: #007A5C;
   --color-success-bg: #E6FBF5;
   --color-success-light: #A3F3D9;
-  
-  --color-danger: #FF4757;
+
+  --color-danger: #C62828;
   --color-danger-bg: #FFE8EB;
   --color-danger-light: #FFB3BC;
-  
+
   --color-warning: #FFA726;
   --color-warning-bg: #FFF3E0;
   --color-warning-light: #FFD699;
-  
+
   --color-info: #00C2FF;
   --color-info-bg: #E0F7FF;
   --color-info-light: #99E3FF;
-  
+
   /* 收入/支出专用色 */
-  --color-income: #00C896;
-  --color-expense: #FF4757;
-  
-  /* 分类色板 - 明亮饱满 */
-  --cat-food: #FF6B9D;        /* 餐饮 - 粉红 */
-  --cat-transport: #5B9FFF;   /* 交通 - 天蓝 */
-  --cat-shopping: #FFB84D;    /* 购物 - 金橙 */
-  --cat-entertainment: #A78BFA; /* 娱乐 - 紫色 */
-  --cat-healthcare: #4ECDC4;  /* 医疗 - 青绿 */
-  --cat-housing: #FF8A5B;     /* 住房 - 橙红 */
-  --cat-education: #6BCF7E;   /* 教育 - 翠绿 */
-  --cat-other: #94A3B8;       /* 其他 - 灰蓝 */
-  
-  /* 阴影系统 - 轻柔层次 */
+  --color-income: #007A5C;
+  --color-expense: #C62828;
+
+  /* 遮罩层（此前缺失，导致底部半屏弹窗遮罩透明） */
+  --color-backdrop: rgba(12, 20, 33, 0.38);
+
+  /* ============ 分类色板 ============ */
+  --cat-food: #FF6B9D;
+  --cat-transport: #5B9FFF;
+  --cat-shopping: #FFB84D;
+  --cat-entertainment: #A78BFA;
+  --cat-healthcare: #4ECDC4;
+  --cat-housing: #FF8A5B;
+  --cat-education: #6BCF7E;
+  --cat-other: #94A3B8;
+
+  /* ============ 阴影系统 ============ */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
   --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.12);
   --shadow-2xl: 0 16px 40px rgba(0, 0, 0, 0.15);
-  
-  /* 特殊效果 */
+
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.12);
   --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.20);
-  
-  /* ============ 字体系统 ============ */
-  
-  /* 字体族 */
-  --font-base: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", 
-               "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", 
-               Arial, sans-serif;
-  --font-numeric: ui-monospace, "SF Mono", Monaco, "Cascadia Code", 
-                  "Roboto Mono", Consolas, monospace;
-  
-  /* 字体大小 - 流式缩放 */
-  --text-xs: clamp(0.688rem, 0.65rem + 0.15vw, 0.75rem);      /* 11-12px */
-  --text-sm: clamp(0.813rem, 0.75rem + 0.25vw, 0.875rem);     /* 13-14px */
-  --text-base: clamp(0.938rem, 0.875rem + 0.25vw, 1rem);      /* 15-16px */
-  --text-lg: clamp(1.063rem, 1rem + 0.25vw, 1.125rem);        /* 17-18px */
-  --text-xl: clamp(1.25rem, 1.125rem + 0.5vw, 1.375rem);      /* 20-22px */
-  --text-2xl: clamp(1.5rem, 1.375rem + 0.5vw, 1.75rem);       /* 24-28px */
-  --text-3xl: clamp(1.875rem, 1.625rem + 1vw, 2.25rem);       /* 30-36px */
-  --text-4xl: clamp(2.25rem, 2rem + 1vw, 3rem);               /* 36-48px */
-  
-  /* 行高 */
-  --leading-tight: 1.25;
-  --leading-snug: 1.375;
-  --leading-normal: 1.5;
-  --leading-relaxed: 1.625;
-  --leading-loose: 2;
-  
-  /* 字重 */
-  --font-light: 300;
-  --font-normal: 400;
-  --font-medium: 500;
-  --font-semibold: 600;
-  --font-bold: 700;
-  --font-extrabold: 800;
-  
+
   /* ============ 间距系统 - 8px 基准 ============ */
   --space-0: 0;
-  --space-1: 0.25rem;    /* 4px */
-  --space-2: 0.5rem;     /* 8px */
-  --space-3: 0.75rem;    /* 12px */
-  --space-4: 1rem;       /* 16px */
-  --space-5: 1.25rem;    /* 20px */
-  --space-6: 1.5rem;     /* 24px */
-  --space-7: 1.75rem;    /* 28px */
-  --space-8: 2rem;       /* 32px */
-  --space-10: 2.5rem;    /* 40px */
-  --space-12: 3rem;      /* 48px */
-  --space-16: 4rem;      /* 64px */
-  --space-20: 5rem;      /* 80px */
-  
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 1.75rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* 兼容别名：老代码里用过 --spacing-* 命名 */
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-4);
+  --spacing-lg: var(--space-5);
+  --spacing-xl: var(--space-6);
+
   /* ============ 圆角系统 ============ */
   --radius-none: 0;
-  --radius-xs: 0.25rem;   /* 4px */
-  --radius-sm: 0.5rem;    /* 8px */
-  --radius-md: 0.75rem;   /* 12px */
-  --radius-lg: 1rem;      /* 16px */
-  --radius-xl: 1.25rem;   /* 20px */
-  --radius-2xl: 1.5rem;   /* 24px */
-  --radius-3xl: 2rem;     /* 32px */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
   --radius-full: 999px;
-  
+
   /* ============ 动画系统 ============ */
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-out: cubic-bezier(0, 0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  
+
   --duration-fast: 150ms;
   --duration-base: 200ms;
   --duration-medium: 300ms;
   --duration-slow: 400ms;
   --duration-slower: 500ms;
-  
+
   /* ============ Z-index 层级 ============ */
   --z-base: 0;
   --z-dropdown: 100;
@@ -172,55 +152,143 @@
   --z-popover: 600;
   --z-tooltip: 700;
   --z-toast: 800;
-  
+
   /* ============ 布局常量 ============ */
-  --header-height: 3.5rem;      /* 56px */
-  --tabbar-height: 3.5rem;      /* 56px */
-  --composer-height: 3.5rem;    /* 56px */
-  --safe-area-top: env(safe-area-inset-top, 0);
-  --safe-area-bottom: env(safe-area-inset-bottom, 0);
-  --safe-area-left: env(safe-area-inset-left, 0);
-  --safe-area-right: env(safe-area-inset-right, 0);
-  
-  --content-max-width: 48rem;   /* 768px */
+  --header-height: 3.5rem;
+  --tabbar-height: 3.5rem;
+  --composer-height: 3.5rem;
+  --dock-height: calc(var(--composer-height) + var(--tabbar-height));
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
+  --content-max-width: 600px;
   --page-padding: var(--space-4);
+
+  /* ============ 密度令牌（由外观配置覆盖） ============ */
+  --density-gap: 0.75rem;
+  --density-pad: 1rem;
+  --density-cell: 2.6rem;
+  --density-lh: 1.5;
+
+  /* ============ 玻璃拟态令牌（由外观配置覆盖） ============ */
+  /* 不支持 backdrop-filter 的老 WebView 上，appearance.js 会把 alpha 顶到 100%、blur 归零，
+     让玻璃退化成不透明实色面板，而不是「底下的字透上来」 */
+  --glass-alpha: 86%;
+  --glass-alpha-strong: 96%;
+  --glass-blur: 16px;
+  --glass-blur-strong: 26px;
+  --glass-saturate: 1.3;
+  --glass-border-color: rgba(255, 255, 255, 0.55);
+  --glass-hairline: rgba(0, 194, 255, 0.16);
+  --glass-shadow: 0.16;
+
+  /* ============ 外观配置编译出的主题色（由 appearance.js 覆盖） ============ */
+  /* 这里的默认值 = 默认主题色 #00C2FF 编译出来的结果，可在 appearance.js
+     的 accentTokens() 里核对；--app-accent-btn 是「按钮实心底色」，
+     --app-on-accent 是压在上面的文字色，两者保证 ≥4.5:1。 */
+  --app-accent: #00C2FF;
+  --app-accent-rgb: 0 194 255;
+  --app-accent-soft: rgba(0, 194, 255, 0.14);
+  --app-accent-softer: rgba(0, 194, 255, 0.07);
+  --app-accent-strong: #00C2FF;
+  --app-accent-btn: #00C2FF;
+  --app-accent-btn-2: #42D2FF;
+  --app-on-accent: #0B1220;
+  --app-accent-ink: #00759A;
 }
 
-/* ============ 排版工具类 ============ */
-.text-xs { font-size: var(--text-xs); }
-.text-sm { font-size: var(--text-sm); }
-.text-base { font-size: var(--text-base); }
-.text-lg { font-size: var(--text-lg); }
-.text-xl { font-size: var(--text-xl); }
-.text-2xl { font-size: var(--text-2xl); }
-.text-3xl { font-size: var(--text-3xl); }
-.text-4xl { font-size: var(--text-4xl); }
+/* ============ 字体家族（不随视图外观变化） ============ */
+:root {
+  --font-base: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue",
+               Arial, sans-serif;
+  --font-numeric: ui-monospace, "SF Mono", Monaco, "Cascadia Code",
+                  "Roboto Mono", Consolas, monospace;
 
-.font-light { font-weight: var(--font-light); }
-.font-normal { font-weight: var(--font-normal); }
-.font-medium { font-weight: var(--font-medium); }
-.font-semibold { font-weight: var(--font-semibold); }
-.font-bold { font-weight: var(--font-bold); }
+  --text-xs: clamp(0.688rem, 0.65rem + 0.15vw, 0.75rem);
+  --text-sm: clamp(0.813rem, 0.75rem + 0.25vw, 0.875rem);
+  --text-base: clamp(0.938rem, 0.875rem + 0.25vw, 1rem);
+  --text-lg: clamp(1.063rem, 1rem + 0.25vw, 1.125rem);
+  --text-xl: clamp(1.25rem, 1.125rem + 0.5vw, 1.375rem);
+  --text-2xl: clamp(1.5rem, 1.375rem + 0.5vw, 1.75rem);
+  --text-3xl: clamp(1.875rem, 1.625rem + 1vw, 2.25rem);
+  --text-4xl: clamp(2.25rem, 2rem + 1vw, 3rem);
 
-.leading-tight { line-height: var(--leading-tight); }
-.leading-normal { line-height: var(--leading-normal); }
-.leading-relaxed { line-height: var(--leading-relaxed); }
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose: 2;
 
-.text-primary { color: var(--text-primary); }
-.text-secondary { color: var(--text-secondary); }
-.text-tertiary { color: var(--text-tertiary); }
+  --font-light: 300;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+  --font-extrabold: 800;
+}
 
-.numeric {
+/* ==========================================
+   排版类（index.html / JS 中使用的 t-* 语义字体）
+   此前完全缺失，是「布局很乱」的主要原因之一
+   ========================================== */
+.t-hero {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.t-title1 {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.03em;
+}
+
+.t-title2 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  line-height: var(--leading-snug);
+  letter-spacing: -0.02em;
+}
+
+.t-title3 {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  line-height: var(--leading-snug);
+  letter-spacing: -0.01em;
+}
+
+.t-body {
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+.t-caption {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+
+.t-footnote {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-tertiary);
+}
+
+.t-numeric {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
-/* ============ 响应式断点 ============ */
-/* 移动优先设计 */
-/* sm: 640px */
-/* md: 768px */
-/* lg: 1024px */
+/* 提醒：这里曾有一批「兼容旧类名」的 text-* / font-* / leading-* / .numeric 工具类，
+   全项目没有任何地方用过（属于上一轮重构遗留的死样式），已删除。
+   需要字号/字重时直接用 var(--text-*) / var(--font-*) 令牌，或用上面的 t-* 语义类。 */
 
 /* ============ 无障碍 ============ */
 @media (prefers-reduced-motion: reduce) {
@@ -229,11 +297,6 @@
     --duration-base: 1ms;
     --duration-medium: 1ms;
     --duration-slow: 1ms;
+    --duration-slower: 1ms;
   }
-}
-
-/* ============ 深色模式适配（预留） ============ */
-@media (prefers-color-scheme: dark) {
-  /* 如果需要深色模式，在这里覆盖变量 */
-  /* 当前设计为明亮主题优先 */
 }

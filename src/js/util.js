@@ -60,6 +60,35 @@ export function fromKey(key) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/**
+ * 宽松解析日期文本 → 补零的 YYYY-MM-DD；无法识别返回 null。
+ *
+ * 大模型返回的日期格式五花八门（2026-10-4 / 2026/10/4 / 2026.10.4 / 2026年10月4日 /
+ * 2026-10-04T12:00:00Z），只要稍微不一样，旧的严格正则就会把用户刚记的账整条丢掉。
+ * 这里作为唯一的日期收口点：能认出来的都归一化，认不出来才交给调用方决定。
+ */
+export function normalizeDateKey(value) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : dateKey(value);
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  // 年 + 1~2 位月 + 1~2 位日，分隔符容忍 - / . 年月日（可跟「日」或时间部分），另接受紧凑写法 20261004
+  const hit =
+    text.match(/^(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?/) ??
+    text.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!hit) return null;
+
+  const year = Number(hit[1]);
+  const month = Number(hit[2]);
+  const day = Number(hit[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  // 2026-02-31 会被 Date 顺延到 3 月，回读三段校验挡掉这类溢出日期
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return dateKey(date);
+}
+
 export const today = () => startOfDay(new Date());
 
 export function startOfDay(date) {
@@ -146,6 +175,35 @@ export function formatMoney(value) {
 /** ¥1,234 */
 export function yuan(value) {
   return `¥${formatMoney(value)}`;
+}
+
+/** 全角数字与标点 → 半角（中文输入法里很容易带出来） */
+function toHalfWidth(text) {
+  return text
+    .replace(/[\uFF10-\uFF19]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[\uFF0E\u3002]/g, ".")
+    .replace(/\uFF0C/g, ",");
+}
+
+/**
+ * 宽松解析金额 → 正数（保留 2 位小数）；无法识别返回 null。
+ *
+ * 大模型经常返回 "¥120" / "1,234.5" / "120元" / "1.2万" 这类字符串，
+ * 而 Number("120元") 是 NaN —— 旧实现会因此把整条账单静默丢掉。
+ */
+export function parseAmount(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? Math.abs(round2(value)) : null;
+  const text = toHalfWidth(String(value ?? "")).trim();
+  if (!text) return null;
+
+  const scale = text.includes("万") ? 10000 : text.includes("千") ? 1000 : 1;
+  const cleaned = text.replace(/[¥￥$€£]|元|块|人民币|[\s,]/g, "");
+  const hit = cleaned.match(/-?\d+(?:\.\d+)?/);
+  if (!hit) return null;
+
+  const amount = Number(hit[0]);
+  if (!Number.isFinite(amount)) return null;
+  return Math.abs(round2(amount * scale));
 }
 
 /** 日历格子内的紧凑金额：120 / 1234 / 1.2万（目前未使用，保留供后续复用） */

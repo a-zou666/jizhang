@@ -2,9 +2,9 @@
 
 import { bindCalendarSwipe, renderCalendar } from "./calendar.js";
 import { renderDetail } from "./detail.js";
-import { getSettings, monthTotal } from "./store.js";
+import { getSettings, monthRecords, monthTotal, recordsOf, todayKey } from "./store.js";
 import { closeModal, haptic, openModal } from "./ui.js";
-import { $, clamp, yuan } from "./util.js";
+import { $, clamp, el, yuan } from "./util.js";
 import { goToMonth, view } from "./view.js";
 
 /** 首页整体渲染 */
@@ -28,7 +28,18 @@ function renderGreet() {
     hour < 18 ? "下午好" :
     hour < 22 ? "晚上好，今天的支出怎么样？" :
     "夜深了，别忘了明天的预算";
-  greet.textContent = part;
+
+  // 顺带报一句今天的情况：顶部一眼就能看到今天记了多少
+  // 问候语本身可能已经包含「今天」，所以小结直接用「已记 N 笔 / 还没有记账」的写法
+  const records = recordsOf(todayKey());
+  const todayTotal = records.reduce((sum, record) => sum + record.amount, 0);
+  const detail = records.length
+    ? `已记 ${records.length} 笔 · ${yuan(todayTotal)}`
+    : "还没有记账";
+  greet.replaceChildren(
+    el("span", { text: part }),
+    el("span", { class: "home-header__greet-detail", text: detail }),
+  );
 }
 
 /* ---------------- 月进度 ---------------- */
@@ -41,6 +52,11 @@ function renderProgress() {
   $("#monthSpent").textContent = yuan(spent);
   $("#monthBudget").textContent = budget > 0 ? `/ ${yuan(budget)}` : "/ 未设置预算";
   $("#progressFill").style.width = `${percent}%`;
+
+  // 日历面板的抬头：本月支出合计 + 笔数
+  const count = monthRecords(view.month).length;
+  $("#calendarSpent").textContent = yuan(spent);
+  $("#calendarCount").textContent = count ? `${count} 笔` : "";
 
   const track = $("#progressTrack");
   track.setAttribute("aria-valuenow", String(Math.round(percent)));
