@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar"><div><p class="eyebrow">PERSONAL FINANCE</p><h1>账本日历</h1></div><div class="month-switcher"><button class="icon-button" id="previousMonth" aria-label="上个月">‹</button><span id="monthLabel"></span><button class="icon-button" id="nextMonth" aria-label="下个月">›</button></div></header>
+    <section class="summary-grid"><div class="summary-card summary-card-accent"><span>本月支出</span><strong>¥<span id="monthTotal">0.00</span></strong><small id="monthCount">暂无记录</small></div><div class="summary-card"><span>今日支出</span><strong>¥<span id="todayTotal">0.00</span></strong><small id="todayCount">准备开始记录</small></div></section>
+    <section class="calendar-card"><div class="weekday-row"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div class="calendar-grid" id="calendarGrid"></div></section>
+    <section class="entry-card"><div class="section-heading"><div><p class="eyebrow">QUICK ENTRY</p><h2>记下一笔</h2></div><span class="status-dot" id="statusText">随手输入即可</span></div><form id="entryForm"><label class="sr-only" for="userInput">账单内容</label><div class="input-row"><input type="text" id="userInput" autocomplete="off" placeholder="例如：今天早上吃肠粉花了 8 元" required><button type="submit" id="submitBtn"><span>记账</span><span aria-hidden="true">↗</span></button></div></form></section>
+    <section class="records-section"><div class="section-heading"><div><p class="eyebrow">RECENT RECORDS</p><h2 id="recordsTitle">今日账单</h2></div><button class="text-button" id="todayButton" type="button">回到今天</button></div><div id="expenseList" class="expense-list"></div></section>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
