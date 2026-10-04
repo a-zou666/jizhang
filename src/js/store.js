@@ -117,9 +117,39 @@ export const getRecords = () => state.records;
 export const getSettings = () => state.settings;
 
 export function categoryColor(name) {
-  const index = state.settings.categories.indexOf(name);
-  const slot = index === -1 ? PALETTE_SIZE : (index % PALETTE_SIZE) + 1;
-  return `var(--cat-${slot})`;
+  const categories = state.settings.categories;
+  const index = categories.indexOf(name);
+  
+  // 使用新的色彩映射
+  const colorMap = {
+    '餐饮': 'var(--cat-food)',
+    '交通': 'var(--cat-transport)',
+    '购物': 'var(--cat-shopping)',
+    '数码': 'var(--cat-shopping)',
+    '娱乐': 'var(--cat-entertainment)',
+    '医疗': 'var(--cat-healthcare)',
+    '住房': 'var(--cat-housing)',
+    '日用': 'var(--cat-shopping)',
+    '教育': 'var(--cat-education)',
+    '其他': 'var(--cat-other)',
+  };
+  
+  // 优先使用预定义颜色
+  if (colorMap[name]) return colorMap[name];
+  
+  // 回退到循环色板
+  const colors = [
+    'var(--cat-food)',
+    'var(--cat-transport)',
+    'var(--cat-shopping)',
+    'var(--cat-entertainment)',
+    'var(--cat-healthcare)',
+    'var(--cat-housing)',
+    'var(--cat-education)',
+    'var(--cat-other)',
+  ];
+  
+  return index >= 0 ? colors[index % colors.length] : 'var(--cat-other)';
 }
 
 export function recordsOf(key) {

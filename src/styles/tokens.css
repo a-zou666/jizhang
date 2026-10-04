@@ -1,155 +1,239 @@
-/* ==========================================================================
-   AI 记账 · 设计令牌 (Design Tokens)
-   严格对应《UI 设计规范》第一 ~ 五节、第十一 ~ 十二节
-   注：规范中的 pt 在 CSS 中按 1:1 映射为 px（iOS pt ≈ CSS px @1x）
-   ========================================================================== */
+/* ==========================================
+   AI 记账 · 全新设计系统
+   明亮清爽 · 现代简洁
+   ========================================== */
 
 :root {
-  /* ---------------- 二、色彩系统 ---------------- */
-  --color-primary: #2dd4bf;        /* teal-400 强调色、高亮、按钮、活跃态 */
-  --color-primary-dark: #14b8a6;   /* teal-500 按下态、进度条填充 */
-  --color-primary-soft: #f0fdfa;   /* 选中日期格子底色 */
-  --color-primary-tint: rgba(45, 212, 191, 0.12);
-
-  --color-bg: #f5f5f7;             /* 全局页面底色 */
-  --color-card: #ffffff;           /* 卡片、弹窗、输入框底色 */
-
-  --color-text-primary: #1c1c1e;   /* 主标题、金额、重要文字 */
-  --color-text-secondary: #8e8e93; /* 副标题、日期、提示语 */
-  --color-text-tertiary: #c7c7cc;  /* 占位符、禁用态 */
-
-  --color-border: #e5e5ea;         /* 分割线、卡片边框 */
-  --color-danger: #ff3b30;         /* 删除、超预算警告 */
-  --color-success: #34c759;        /* 收入、确认成功 */
-
-  --color-press: rgba(0, 0, 0, 0.045);          /* 列表按下反馈 */
-  --color-backdrop: rgba(0, 0, 0, 0.32);        /* 弹窗背景渐暗 */
-
-  /* 分类色板（6 色循环） */
-  --cat-1: #ff6b6b;  /* 餐饮 */
-  --cat-2: #4ecdc4;  /* 交通 */
-  --cat-3: #45b7d1;  /* 数码 */
-  --cat-4: #96ceb4;  /* 日用 */
-  --cat-5: #ffeaa7;  /* 娱乐 */
-  --cat-6: #dda0dd;  /* 其他 */
-
-  /* ---------------- 三、字体规范（iOS SF Pro 基准） ---------------- */
-  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-  --font-numeric: var(--font-family);
-
-  --text-hero-size: 26px;    --text-hero-line: 32px;    --text-hero-weight: 700;  /* 大标题：月份 / 设置标题 */
-  --text-title1-size: 22px;  --text-title1-line: 28px;  --text-title1-weight: 600;/* 标题1 月总支出金额 */
-  --text-title2-size: 18px;  --text-title2-line: 24px;  --text-title2-weight: 600;/* 标题2 */
-  --text-title3-size: 17px;  --text-title3-line: 22px;  --text-title3-weight: 500;/* 标题3 明细物品名 */
-  --text-body-size: 15px;    --text-body-line: 20px;    --text-body-weight: 400;  /* 正文 */
-  --text-caption-size: 13px; --text-caption-line: 18px; --text-caption-weight: 400;/* 标注 日期 */
-  --text-footnote-size: 12px;--text-footnote-line: 16px;--text-footnote-weight: 400;/* 小字 */
-  --text-tab-size: 10px;     --text-tab-line: 12px;                              /* 底部导航文字 */
-
-  /* ---------------- 四、间距系统（4pt 基准） ---------------- */
-  --spacing-xs: 4px;    /* 图标与文字间距 */
-  --spacing-sm: 8px;    /* 紧凑元素间距 */
-  --spacing-md: 12px;   /* 列表项内间距 */
-  --spacing-lg: 16px;   /* 卡片内边距 */
-  --spacing-xl: 24px;   /* 区块之间 */
-  --spacing-2xl: 32px;  /* 页面左右边距 */
-
-  /* 圆角 */
-  --radius-sm: 8px;     /* 标签、小按钮 */
-  --radius-md: 12px;    /* 列表项、输入框 */
-  --radius-lg: 16px;    /* 卡片、弹窗 */
-  --radius-xl: 24px;    /* 底部浮窗、大卡片 */
-  --radius-full: 999px; /* 圆形按钮、头像 */
-
-  /* ---------------- 五、阴影 ---------------- */
+  /* ============ 颜色系统 - 明亮清爽 ============ */
+  
+  /* 主色调 - 清新蓝绿 */
+  --primary-50: #E0F7FF;
+  --primary-100: #B3ECFF;
+  --primary-200: #80E0FF;
+  --primary-300: #4DD4FF;
+  --primary-400: #26CBFF;
+  --primary-500: #00C2FF;
+  --primary-600: #00B0F0;
+  --primary-700: #0099D6;
+  --primary-800: #0083BC;
+  --primary-900: #005F91;
+  
+  /* 背景色 - 极致纯净 */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8FAFB;
+  --bg-tertiary: #F0F4F7;
+  --bg-overlay: rgba(0, 0, 0, 0.02);
+  
+  /* 卡片和表面 */
+  --surface-primary: #FFFFFF;
+  --surface-secondary: #FAFBFC;
+  --surface-elevated: #FFFFFF;
+  --surface-hover: #F5F8FA;
+  --surface-active: #EBF2F7;
+  
+  /* 文字颜色 - 高对比清晰 */
+  --text-primary: #0A0F1A;
+  --text-secondary: #4A5568;
+  --text-tertiary: #718096;
+  --text-placeholder: #A0AEC0;
+  --text-disabled: #CBD5E0;
+  --text-inverse: #FFFFFF;
+  
+  /* 边框颜色 - 柔和分隔 */
+  --border-light: #E8ECF0;
+  --border-default: #D4DCE5;
+  --border-medium: #B8C5D3;
+  --border-strong: #8B99AB;
+  
+  /* 语义色 - 清晰明确 */
+  --color-success: #00C896;
+  --color-success-bg: #E6FBF5;
+  --color-success-light: #A3F3D9;
+  
+  --color-danger: #FF4757;
+  --color-danger-bg: #FFE8EB;
+  --color-danger-light: #FFB3BC;
+  
+  --color-warning: #FFA726;
+  --color-warning-bg: #FFF3E0;
+  --color-warning-light: #FFD699;
+  
+  --color-info: #00C2FF;
+  --color-info-bg: #E0F7FF;
+  --color-info-light: #99E3FF;
+  
+  /* 收入/支出专用色 */
+  --color-income: #00C896;
+  --color-expense: #FF4757;
+  
+  /* 分类色板 - 明亮饱满 */
+  --cat-food: #FF6B9D;        /* 餐饮 - 粉红 */
+  --cat-transport: #5B9FFF;   /* 交通 - 天蓝 */
+  --cat-shopping: #FFB84D;    /* 购物 - 金橙 */
+  --cat-entertainment: #A78BFA; /* 娱乐 - 紫色 */
+  --cat-healthcare: #4ECDC4;  /* 医疗 - 青绿 */
+  --cat-housing: #FF8A5B;     /* 住房 - 橙红 */
+  --cat-education: #6BCF7E;   /* 教育 - 翠绿 */
+  --cat-other: #94A3B8;       /* 其他 - 灰蓝 */
+  
+  /* 阴影系统 - 轻柔层次 */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
+  --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.12);
+  --shadow-2xl: 0 16px 40px rgba(0, 0, 0, 0.15);
+  
+  /* 特殊效果 */
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.12);
-  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.16);
-
-  /* ---------------- 六、底部导航 ---------------- */
-  --tabbar-height: 49px;
-  --tabbar-bg: rgba(255, 255, 255, 0.85);
-  --tabbar-blur: 20px;
-  --tabbar-border: 0.5px;
-
-  /* 悬浮输入条 */
-  --composer-height: 48px;
-  --confirm-button-height: 50px;
-
-  /* ---------------- 十一、动效规范 ---------------- */
-  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.20);
+  
+  /* ============ 字体系统 ============ */
+  
+  /* 字体族 */
+  --font-base: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", 
+               "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", 
+               Arial, sans-serif;
+  --font-numeric: ui-monospace, "SF Mono", Monaco, "Cascadia Code", 
+                  "Roboto Mono", Consolas, monospace;
+  
+  /* 字体大小 - 流式缩放 */
+  --text-xs: clamp(0.688rem, 0.65rem + 0.15vw, 0.75rem);      /* 11-12px */
+  --text-sm: clamp(0.813rem, 0.75rem + 0.25vw, 0.875rem);     /* 13-14px */
+  --text-base: clamp(0.938rem, 0.875rem + 0.25vw, 1rem);      /* 15-16px */
+  --text-lg: clamp(1.063rem, 1rem + 0.25vw, 1.125rem);        /* 17-18px */
+  --text-xl: clamp(1.25rem, 1.125rem + 0.5vw, 1.375rem);      /* 20-22px */
+  --text-2xl: clamp(1.5rem, 1.375rem + 0.5vw, 1.75rem);       /* 24-28px */
+  --text-3xl: clamp(1.875rem, 1.625rem + 1vw, 2.25rem);       /* 30-36px */
+  --text-4xl: clamp(2.25rem, 2rem + 1vw, 3rem);               /* 36-48px */
+  
+  /* 行高 */
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose: 2;
+  
+  /* 字重 */
+  --font-light: 300;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+  --font-extrabold: 800;
+  
+  /* ============ 间距系统 - 8px 基准 ============ */
+  --space-0: 0;
+  --space-1: 0.25rem;    /* 4px */
+  --space-2: 0.5rem;     /* 8px */
+  --space-3: 0.75rem;    /* 12px */
+  --space-4: 1rem;       /* 16px */
+  --space-5: 1.25rem;    /* 20px */
+  --space-6: 1.5rem;     /* 24px */
+  --space-7: 1.75rem;    /* 28px */
+  --space-8: 2rem;       /* 32px */
+  --space-10: 2.5rem;    /* 40px */
+  --space-12: 3rem;      /* 48px */
+  --space-16: 4rem;      /* 64px */
+  --space-20: 5rem;      /* 80px */
+  
+  /* ============ 圆角系统 ============ */
+  --radius-none: 0;
+  --radius-xs: 0.25rem;   /* 4px */
+  --radius-sm: 0.5rem;    /* 8px */
+  --radius-md: 0.75rem;   /* 12px */
+  --radius-lg: 1rem;      /* 16px */
+  --radius-xl: 1.25rem;   /* 20px */
+  --radius-2xl: 1.5rem;   /* 24px */
+  --radius-3xl: 2rem;     /* 32px */
+  --radius-full: 999px;
+  
+  /* ============ 动画系统 ============ */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --motion-page: 300ms;      /* 页面切换：水平滑入 */
-  --motion-sheet: 250ms;     /* 弹窗出现：底部上滑 + 背景渐暗 */
-  --motion-cell: 150ms;      /* 日历格子点击：0.95 → 1.0 */
-  --motion-composer: 200ms;  /* 输入条激活：上移 + 展开 */
-  --motion-fly: 350ms;       /* 确认入账：条目飞入日历格子 */
-
-  /* ---------------- 十二、图标规范 ---------------- */
-  --icon-stroke-width: 1.5;
-  --icon-nav: 24px;      /* 导航 */
-  --icon-nav-idle: 22px; /* 未选导航 */
-  --icon-list: 20px;     /* 列表 */
-  --icon-inline: 16px;   /* 内联 */
-
-  /* ---------------- 安全区 / 布局 ---------------- */
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --content-inset: var(--spacing-2xl);
+  --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-medium: 300ms;
+  --duration-slow: 400ms;
+  --duration-slower: 500ms;
+  
+  /* ============ Z-index 层级 ============ */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+  --z-toast: 800;
+  
+  /* ============ 布局常量 ============ */
+  --header-height: 3.5rem;      /* 56px */
+  --tabbar-height: 3.5rem;      /* 56px */
+  --composer-height: 3.5rem;    /* 56px */
+  --safe-area-top: env(safe-area-inset-top, 0);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0);
+  --safe-area-left: env(safe-area-inset-left, 0);
+  --safe-area-right: env(safe-area-inset-right, 0);
+  
+  --content-max-width: 48rem;   /* 768px */
+  --page-padding: var(--space-4);
 }
 
-/* ---------------- 排版工具类 ---------------- */
-.t-hero {
-  font-size: var(--text-hero-size);
-  line-height: var(--text-hero-line);
-  font-weight: var(--text-hero-weight);
-  letter-spacing: -0.4px;
-}
-.t-title1 {
-  font-size: var(--text-title1-size);
-  line-height: var(--text-title1-line);
-  font-weight: var(--text-title1-weight);
-  letter-spacing: -0.3px;
-}
-.t-title2 {
-  font-size: var(--text-title2-size);
-  line-height: var(--text-title2-line);
-  font-weight: var(--text-title2-weight);
-}
-.t-title3 {
-  font-size: var(--text-title3-size);
-  line-height: var(--text-title3-line);
-  font-weight: var(--text-title3-weight);
-}
-.t-body {
-  font-size: var(--text-body-size);
-  line-height: var(--text-body-line);
-  font-weight: var(--text-body-weight);
-}
-.t-caption {
-  font-size: var(--text-caption-size);
-  line-height: var(--text-caption-line);
-  font-weight: var(--text-caption-weight);
-}
-.t-footnote {
-  font-size: var(--text-footnote-size);
-  line-height: var(--text-footnote-line);
-  font-weight: var(--text-footnote-weight);
-}
-.t-numeric {
+/* ============ 排版工具类 ============ */
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-base { font-size: var(--text-base); }
+.text-lg { font-size: var(--text-lg); }
+.text-xl { font-size: var(--text-xl); }
+.text-2xl { font-size: var(--text-2xl); }
+.text-3xl { font-size: var(--text-3xl); }
+.text-4xl { font-size: var(--text-4xl); }
+
+.font-light { font-weight: var(--font-light); }
+.font-normal { font-weight: var(--font-normal); }
+.font-medium { font-weight: var(--font-medium); }
+.font-semibold { font-weight: var(--font-semibold); }
+.font-bold { font-weight: var(--font-bold); }
+
+.leading-tight { line-height: var(--leading-tight); }
+.leading-normal { line-height: var(--leading-normal); }
+.leading-relaxed { line-height: var(--leading-relaxed); }
+
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+
+.numeric {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.02em;
 }
 
-/* 降级：用户系统关闭动效 */
+/* ============ 响应式断点 ============ */
+/* 移动优先设计 */
+/* sm: 640px */
+/* md: 768px */
+/* lg: 1024px */
+
+/* ============ 无障碍 ============ */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --motion-page: 1ms;
-    --motion-sheet: 1ms;
-    --motion-cell: 1ms;
-    --motion-composer: 1ms;
-    --motion-fly: 1ms;
+    --duration-fast: 1ms;
+    --duration-base: 1ms;
+    --duration-medium: 1ms;
+    --duration-slow: 1ms;
   }
+}
+
+/* ============ 深色模式适配（预留） ============ */
+@media (prefers-color-scheme: dark) {
+  /* 如果需要深色模式，在这里覆盖变量 */
+  /* 当前设计为明亮主题优先 */
 }

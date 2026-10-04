@@ -136,8 +136,10 @@ export function bindComposer({ onNeedSettings } = {}) {
     const SR = globalThis.MediaRecorder;
     if (!SR) return null;
     try {
+      // 请求麦克风权限
       recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (error) {
+      console.error("[composer] 麦克风权限被拒绝或不可用:", error);
       toast(`无法访问麦克风：${error?.message ?? error}`, "error");
       return null;
     }
@@ -212,11 +214,14 @@ export function bindComposer({ onNeedSettings } = {}) {
   }
 
   async function startVoice() {
-    // 优先 WebSpeech；否则 MediaRecorder + Whisper
-    if (SpeechRecognition) return { kind: "web", instance: startWebSpeech() };
+    // 优先 MediaRecorder + Whisper（更稳定），然后 WebSpeech
     if (hasBackend() && typeof MediaRecorder !== "undefined") {
       const instance = await startMediaRecorder();
       if (instance) return { kind: "media", instance };
+    }
+    if (SpeechRecognition) {
+      const instance = startWebSpeech();
+      if (instance) return { kind: "web", instance };
     }
     if (!SpeechRecognition && typeof MediaRecorder === "undefined") {
       toast("当前环境不支持语音录入，请用键盘输入", "error");
