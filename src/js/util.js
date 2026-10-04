@@ -148,7 +148,7 @@ export function yuan(value) {
   return `¥${formatMoney(value)}`;
 }
 
-/** 日历格子内的紧凑金额：120 / 1234 / 1.2万 */
+/** 日历格子内的紧凑金额：120 / 1234 / 1.2万（目前未使用，保留供后续复用） */
 export function formatCellAmount(value) {
   const amount = round2(Number(value) || 0);
   if (amount >= 10000) {

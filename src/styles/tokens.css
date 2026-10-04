@@ -38,13 +38,13 @@
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   --font-numeric: var(--font-family);
 
-  --text-hero-size: 34px;    --text-hero-line: 41px;    --text-hero-weight: 700;  /* 大标题 */
-  --text-title1-size: 28px;  --text-title1-line: 34px;  --text-title1-weight: 600;/* 标题1 月总支出 */
-  --text-title2-size: 22px;  --text-title2-line: 28px;  --text-title2-weight: 600;/* 标题2 格子内金额 */
-  --text-title3-size: 20px;  --text-title3-line: 25px;  --text-title3-weight: 500;/* 标题3 明细物品名 */
-  --text-body-size: 17px;    --text-body-line: 22px;    --text-body-weight: 400;  /* 正文 */
-  --text-caption-size: 15px; --text-caption-line: 20px; --text-caption-weight: 400;/* 标注 日期 */
-  --text-footnote-size: 13px;--text-footnote-line: 18px;--text-footnote-weight: 400;/* 小字 */
+  --text-hero-size: 26px;    --text-hero-line: 32px;    --text-hero-weight: 700;  /* 大标题：月份 / 设置标题 */
+  --text-title1-size: 22px;  --text-title1-line: 28px;  --text-title1-weight: 600;/* 标题1 月总支出金额 */
+  --text-title2-size: 18px;  --text-title2-line: 24px;  --text-title2-weight: 600;/* 标题2 */
+  --text-title3-size: 17px;  --text-title3-line: 22px;  --text-title3-weight: 500;/* 标题3 明细物品名 */
+  --text-body-size: 15px;    --text-body-line: 20px;    --text-body-weight: 400;  /* 正文 */
+  --text-caption-size: 13px; --text-caption-line: 18px; --text-caption-weight: 400;/* 标注 日期 */
+  --text-footnote-size: 12px;--text-footnote-line: 16px;--text-footnote-weight: 400;/* 小字 */
   --text-tab-size: 10px;     --text-tab-line: 12px;                              /* 底部导航文字 */
 
   /* ---------------- 四、间距系统（4pt 基准） ---------------- */

@@ -144,13 +144,27 @@ li {
    ========================================================================== */
 .home-header {
   padding: calc(var(--safe-top) + var(--spacing-xl)) var(--content-inset) var(--spacing-sm);
+  background: linear-gradient(180deg, #ffffff 0%, var(--color-bg) 92%);
 }
 
 .home-header__row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: var(--spacing-md);
+}
+
+.home-header__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.home-header__greet {
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote-size);
+  letter-spacing: 0.5px;
 }
 
 .home-title {
@@ -163,7 +177,7 @@ li {
   flex: none;
   align-items: center;
   gap: var(--spacing-xs);
-  height: 32px;
+  height: 30px;
   padding: 0 var(--spacing-md);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
@@ -171,6 +185,7 @@ li {
   color: var(--color-primary-dark);
   font-size: var(--text-footnote-size);
   font-weight: 600;
+  box-shadow: var(--shadow-card);
   transition: transform var(--motion-cell) var(--ease-spring);
 }
 
@@ -183,37 +198,64 @@ li {
   height: var(--icon-inline);
 }
 
-/* 月进度 */
+/* 月进度：做成一个漂浮的小卡片 */
 .month-progress {
   margin-top: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 100%);
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  box-shadow: 0 6px 18px rgba(45, 212, 191, 0.12);
+}
+
+.month-progress__row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.month-progress__col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.month-progress__caption {
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote-size);
+  letter-spacing: 0.4px;
 }
 
 .month-progress__meta {
   display: flex;
   align-items: baseline;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .month-progress__spent {
   color: var(--color-text-primary);
 }
 
-.month-progress__budget,
-.month-progress__ratio {
+.month-progress__budget {
   color: var(--color-text-secondary);
-  font-size: var(--text-caption-size);
-  line-height: var(--text-caption-line);
 }
 
 .month-progress__ratio {
-  margin-left: auto;
-  font-weight: 600;
+  flex: none;
+  align-self: flex-end;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+  font-size: var(--text-footnote-size);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .month-progress__track {
   height: 6px;
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-md);
   border-radius: var(--radius-full);
   background: var(--color-border);
   overflow: hidden;
@@ -223,15 +265,27 @@ li {
   width: 0;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-primary-dark);
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   transition: width var(--motion-page) var(--ease-out), background-color 200ms linear;
 }
 
+.month-progress__hint {
+  margin-top: var(--spacing-sm);
+  color: var(--color-text-tertiary);
+}
+
+.month-progress.is-over {
+  background: linear-gradient(135deg, #fff1f0 0%, #ffffff 100%);
+  border-color: rgba(255, 59, 48, 0.2);
+  box-shadow: 0 6px 18px rgba(255, 59, 48, 0.1);
+}
+
 .month-progress.is-over .month-progress__fill {
-  background: var(--color-danger);
+  background: linear-gradient(90deg, #ff6b6b 0%, var(--color-danger) 100%);
 }
 
 .month-progress.is-over .month-progress__ratio {
+  background: rgba(255, 59, 48, 0.12);
   color: var(--color-danger);
 }
 
@@ -244,6 +298,9 @@ li {
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  background: var(--color-card);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
 }
 
 .calendar-card.is-swiping {
@@ -272,10 +329,10 @@ li {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
-  min-height: 68px;
-  padding: 5px 2px 6px;
+  min-height: 58px;
+  padding: 6px 2px 6px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -295,28 +352,8 @@ li {
 .calendar-cell__day {
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line);
-  font-weight: 400;
+  font-weight: 500;
   color: var(--color-text-primary);
-}
-
-.calendar-cell__amount {
-  color: var(--color-text-primary);
-  font-size: var(--text-title3-size);
-  line-height: 1.15;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.4px;
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.calendar-cell__amount.is-compact {
-  font-size: 17px;
-}
-
-.calendar-cell__amount.is-tiny {
-  font-size: 14px;
 }
 
 .calendar-cell__dots {
@@ -328,8 +365,8 @@ li {
 }
 
 .calendar-cell__dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: var(--radius-full);
 }
 
@@ -354,12 +391,20 @@ li {
   background: var(--color-primary-soft);
 }
 
+/* 有记录的日期：日字号加重，便于扫读 */
+.calendar-cell.has-records .calendar-cell__day {
+  font-weight: 700;
+}
+
 /* ==========================================================================
    七、首页 — 今日明细列表
    ========================================================================== */
 .detail-card {
   margin: var(--spacing-lg) var(--content-inset) 0;
   padding: var(--spacing-lg);
+  background: var(--color-card);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
 }
 
 .detail-card__head {
@@ -588,6 +633,14 @@ li {
 
 .voice-wave.is-open {
   display: grid;
+}
+
+.voice-wave.is-recording .voice-wave__ripples span {
+  border-color: rgba(255, 59, 48, 0.6);
+}
+
+.voice-wave.is-recording .voice-wave__mic {
+  background: var(--color-danger);
 }
 
 .voice-wave__inner {
@@ -972,7 +1025,14 @@ li {
    十、设置页
    ========================================================================== */
 .settings-header {
-  padding: calc(var(--safe-top) + var(--spacing-xl)) var(--content-inset) var(--spacing-sm);
+  padding: calc(var(--safe-top) + var(--spacing-xl)) var(--content-inset) var(--spacing-md);
+  background: linear-gradient(180deg, #ffffff 0%, var(--color-bg) 92%);
+}
+
+.settings-header__hint {
+  margin-top: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote-size);
 }
 
 .settings-group-label {
@@ -987,7 +1047,8 @@ li {
   margin: 0 var(--content-inset);
   border-radius: var(--radius-lg);
   background: var(--color-card);
-  box-shadow: var(--shadow-card);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
   overflow: hidden;
 }
 
@@ -1091,6 +1152,25 @@ li {
   color: var(--color-primary-dark);
   font-size: var(--text-footnote-size);
   font-weight: 600;
+}
+
+/* 模型拉取按钮：方形带图标按钮 */
+.show-key-btn:has([data-icon]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  padding: 0;
+}
+
+.show-key-btn:has([data-icon]) svg {
+  width: 18px;
+  height: 18px;
+}
+
+.show-key-btn:has([data-icon]):active {
+  background: var(--color-primary-soft);
+  transform: scale(0.95);
 }
 
 .test-result {

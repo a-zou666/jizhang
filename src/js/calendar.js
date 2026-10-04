@@ -1,20 +1,18 @@
 /** 七、首页 · 日历网格 */
 
 import { attachHorizontalSwipe } from "./gesture.js";
-import { categoriesOf, categoryColor, dailyTotals, getSettings } from "./store.js";
+import { categoriesOf, categoryColor, dailyTotals, getSettings, recordsOf } from "./store.js";
 import { haptic } from "./ui.js";
 import {
   $,
   WEEKDAY_LABELS,
   dateKey,
   el,
-  formatCellAmount,
   isSameDay,
   monthMatrix,
   monthTitle,
   today,
   weekdayOrder,
-  yuan,
 } from "./util.js";
 import { selectDate, shiftMonth, view } from "./view.js";
 
@@ -51,24 +49,16 @@ export function renderCalendar() {
       if (isToday) classes.push("is-today");
       if (date > todayDate) classes.push("is-future");
       if (isSameDay(date, view.selected)) classes.push("is-selected");
+      if (total > 0) classes.push("has-records");
 
       const children = [
         el("span", { class: "calendar-cell__day", text: String(date.getDate()) }),
+        total > 0 ? dotsFor(key) : el("span", { class: "calendar-cell__dots", "aria-hidden": "true" }),
       ];
-
-      if (total > 0) {
-        const text = formatCellAmount(total);
-        const amountClass = ["calendar-cell__amount"];
-        if (text.length >= 5) amountClass.push("is-tiny");
-        else if (text.length >= 4) amountClass.push("is-compact");
-        children.push(el("span", { class: amountClass.join(" "), text }), dotsFor(key));
-      } else {
-        children.push(el("span", { class: "calendar-cell__dots", "aria-hidden": "true" }));
-      }
 
       const label = [`${date.getMonth() + 1}月${date.getDate()}日`];
       if (isToday) label.push("今天");
-      label.push(total > 0 ? `支出 ${yuan(total)}` : "无支出");
+      label.push(total > 0 ? `共 ${recordsOf(key).length} 笔` : "无支出");
 
       return el(
         "button",

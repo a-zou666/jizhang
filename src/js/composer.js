@@ -1,6 +1,6 @@
 /** 八、底部悬浮输入条：文本/语音记账 + 快捷分类 */
 
-import { hasBackend, parseAccounting } from "./bridge.js";
+import { hasBackend, parseAccounting, transcribeAudio } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
 import { attachLongPress } from "./gesture.js";
 import { icon } from "./icons.js";
@@ -21,7 +21,11 @@ export function bindComposer({ onNeedSettings } = {}) {
 
   let busy = false;
   let sendMode = false;
+  /** 语音引擎：web 走 SpeechRecognition，无则走 MediaRecorder + 后端 Whisper */
   let recognition = null;
+  let recordedChunks = [];
+  let recordedMime = "";
+  let recorderStream = null;
 
   /* ---------------- 输入激活态：麦克风 → 发送 ---------------- */
   function setSendMode(on) {
@@ -91,11 +95,9 @@ export function bindComposer({ onNeedSettings } = {}) {
     hint.textContent = "松手转文字";
   };
 
-  function startVoice() {
-    if (!SpeechRecognition) {
-      toast("当前环境不支持语音识别，请用键盘输入", "error");
-      return null;
-    }
+  /** 方案 A：Web SpeechRecognition（浏览器 / 部分 WebView） */
+  function startWebSpeech() {
+    if (!SpeechRecognition) return null;
     const instance = new SpeechRecognition();
     instance.lang = "zh-CN";
     instance.interimResults = true;
@@ -128,27 +130,144 @@ export function bindComposer({ onNeedSettings } = {}) {
     return instance;
   }
 
+  /** 方案 B：MediaRecorder + 后端 Whisper（Android / 桌面 Tauri WebView） */
+  async function startMediaRecorder() {
+    const SR = globalThis.MediaRecorder;
+    if (!SR) return null;
+    try {
+      recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+      toast(`无法访问麦克风：${error?.message ?? error}`, "error");
+      return null;
+    }
+    const mime = pickRecorderMime();
+    recordedChunks = [];
+    recordedMime = mime;
+    const instance = mime ? new SR(recorderStream, { mimeType: mime }) : new SR(recorderStream);
+    instance.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) recordedChunks.push(event.data);
+    });
+    instance.addEventListener("error", (event) => {
+      console.warn("[composer] MediaRecorder 错误", event);
+    });
+    try {
+      instance.start(250);
+    } catch (error) {
+      console.warn("[composer] MediaRecorder 启动失败", error);
+      return null;
+    }
+    return instance;
+  }
+
+  function pickRecorderMime() {
+    if (typeof MediaRecorder === "undefined") return "";
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+    for (const type of candidates) {
+      try {
+        if (MediaRecorder.isTypeSupported(type)) return type;
+      } catch {
+        /* 忽略 */
+      }
+    }
+    return "";
+  }
+
+  async function stopMediaRecorder(instance) {
+    if (!instance) return;
+    if (instance.state !== "inactive") {
+      try {
+        instance.stop();
+      } catch {
+        /* 忽略 */
+      }
+    }
+    if (recorderStream) {
+      recorderStream.getTracks().forEach((track) => track.stop());
+      recorderStream = null;
+    }
+    if (!recordedChunks.length) return;
+    const blob = new Blob(recordedChunks, { type: recordedMime || "audio/webm" });
+    recordedChunks = [];
+    if (blob.size < 1024) {
+      toast("录音太短，请再试一次", "error");
+      return;
+    }
+    const settings = getSettings();
+    if (!settings.apiKey) {
+      toast("请先在设置里配置 API Key", "error");
+      onNeedSettings?.();
+      return;
+    }
+    const loading = toast("正在转写…");
+    try {
+      const text = await transcribeAudio(settings, blob);
+      if (text) submit(text);
+      else toast("没有识别到内容，再试一次", "error");
+    } catch (error) {
+      toast(`转写失败：${String(error?.message ?? error)}`, "error");
+    } finally {
+      loading.remove();
+    }
+  }
+
+  async function startVoice() {
+    // 优先 WebSpeech；否则 MediaRecorder + Whisper
+    if (SpeechRecognition) return { kind: "web", instance: startWebSpeech() };
+    if (hasBackend() && typeof MediaRecorder !== "undefined") {
+      const instance = await startMediaRecorder();
+      if (instance) return { kind: "media", instance };
+    }
+    if (!SpeechRecognition && typeof MediaRecorder === "undefined") {
+      toast("当前环境不支持语音录入，请用键盘输入", "error");
+    } else if (!hasBackend()) {
+      toast("浏览器预览下不支持语音转文字，请用键盘输入", "error");
+    }
+    return null;
+  }
+
+  /** MediaRecorder 模式的视觉提示（屏幕中央波纹） */
+  const showRecording = () => {
+    hint.textContent = "录音中…松手结束";
+    wave.classList.add("is-open", "is-recording");
+    haptic(12);
+  };
+  const hideRecording = () => {
+    wave.classList.remove("is-open", "is-recording");
+    hint.textContent = "松手转文字";
+  };
+
+  async function stopVoice() {
+    if (!recognition) return;
+    const engine = recognition;
+    recognition = null;
+    if (engine.kind === "web") {
+      try {
+        engine.instance.stop();
+      } catch {
+        /* 忽略 */
+      }
+    } else if (engine.kind === "media") {
+      await stopMediaRecorder(engine.instance);
+    }
+  }
+
   attachLongPress(
     action,
-    () => {
+    async () => {
       if (sendMode || busy) return;
-      recognition = startVoice();
-      if (recognition) showWave();
+      const engine = await startVoice();
+      if (!engine?.instance) return;
+      recognition = engine;
+      if (engine.kind === "media") showRecording();
+      else showWave();
     },
     { ms: 260, tolerance: 14 },
   );
 
-  const stopVoice = () => {
-    if (!recognition) return;
-    try {
-      recognition.stop();
-    } catch (error) {
-      console.warn("[composer] 语音识别停止失败", error);
-    }
-    recognition = null;
-  };
   for (const type of ["pointerup", "pointercancel", "pointerleave"]) {
-    action.addEventListener(type, stopVoice);
+    action.addEventListener(type, () => {
+      stopVoice();
+    });
   }
 
   /* ---------------- 快捷分类记账 ---------------- */

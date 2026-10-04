@@ -1,6 +1,6 @@
 /** 十、设置页 */
 
-import { testConnection } from "./bridge.js";
+import { listModels, testConnection } from "./bridge.js";
 import { hydrateIcons } from "./icons.js";
 import {
   PROTOCOL_ORDER,
@@ -72,6 +72,46 @@ export function bindSettings() {
     input.type = hidden ? "text" : "password";
     $("#toggleKey").textContent = hidden ? "隐藏" : "显示";
   });
+
+  /* 拉取模型列表 */
+  hydrateIcons($("#fetchModels"));
+  $("#fetchModels").addEventListener("click", fetchModels);
+
+  /* ---------------- 拉取模型 ---------------- */
+  async function fetchModels() {
+    const current = getSettings();
+    if (!current.apiKey) return toast("请先填写 API Key", "error");
+    if (!current.baseUrl) return toast("请先填写 Base URL", "error");
+
+    const btn = $("#fetchModels");
+    btn.disabled = true;
+    const loading = toast("正在拉取模型…");
+    try {
+      const result = await listModels(current);
+      const dataList = $("#modelList");
+      const input = $("#modelName");
+
+      if (!result.ok) {
+        dataList.replaceChildren();
+        toast(result.message || "拉取模型失败", "error");
+        return;
+      }
+      if (!result.models.length) {
+        dataList.replaceChildren();
+        toast("没有可用的模型", "error");
+        return;
+      }
+      dataList.replaceChildren(
+        ...result.models.map((id) => el("option", { value: id, text: id })),
+      );
+      // 输入框保留 datalist 自动补全 + 自由填写；现有值不在列表时也保留
+      if (current.model) input.value = current.model;
+      toast(`已加载 ${result.models.length} 个模型`, "ok");
+    } finally {
+      btn.disabled = false;
+      loading.remove();
+    }
+  }
 
   /* 测试连接 */
   $("#testBtn").addEventListener("click", async () => {

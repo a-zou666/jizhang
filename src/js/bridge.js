@@ -67,3 +67,73 @@ export async function testConnection(settings) {
     return { ok: false, message: String(error?.message ?? error) };
   }
 }
+
+/**
+ * 从兼容协议 `/v1/models` 拉取可用模型列表
+ * @returns {Promise<{ok: boolean, message: string, models: string[]}>}
+ */
+export async function listModels(settings) {
+  if (!hasBackend()) {
+    // 浏览器环境：给出兜底建议列表
+    return {
+      ok: true,
+      message: "本地预览：未连接后端，请直接填写模型名称",
+      models: [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-5",
+        "claude-3-5-sonnet",
+        "claude-3-7-sonnet",
+        "gemini-2.0-flash",
+      ],
+    };
+  }
+  try {
+    const result = await invoke("list_models", {
+      protocol: settings.protocol,
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+    });
+    return {
+      ok: Boolean(result?.ok),
+      message: String(result?.message ?? ""),
+      models: Array.isArray(result?.models) ? result.models.map((m) => String(m)) : [],
+    };
+  } catch (error) {
+    return { ok: false, message: String(error?.message ?? error), models: [] };
+  }
+}
+
+/**
+ * 把浏览器录制的音频（Blob）转写为文字（OpenAI 兼容 Whisper 接口）
+ * @returns {Promise<string>}
+ */
+export async function transcribeAudio(settings, blob) {
+  if (!hasBackend()) {
+    throw new Error("当前环境不支持长按语音输入");
+  }
+  const base64 = await blobToBase64(blob);
+  const result = await invoke("transcribe_audio", {
+    protocol: settings.protocol,
+    baseUrl: settings.baseUrl,
+    apiKey: settings.apiKey,
+    apiModel: settings.model,
+    audioBase64: base64,
+    mime: blob.type || "audio/webm",
+  });
+  return String(result ?? "").trim();
+}
+
+/** 把 Blob 读成 base64 字符串 */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("读取音频失败"));
+    reader.readAsDataURL(blob);
+  });
+}

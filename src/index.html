@@ -21,24 +21,32 @@
         <section class="page is-active" data-page="home" id="page-home" aria-label="首页">
           <header class="home-header">
             <div class="home-header__row">
-              <h1
-                class="home-title t-hero"
-                id="monthTitle"
-                role="button"
-                tabindex="0"
-                aria-label="切换月份"
-              >—</h1>
+              <div class="home-header__title-group">
+                <p class="home-header__greet" id="homeGreet">你好呀</p>
+                <h1
+                  class="home-title t-hero"
+                  id="monthTitle"
+                  role="button"
+                  tabindex="0"
+                  aria-label="切换月份"
+                >—</h1>
+              </div>
               <button class="today-btn" id="todayBtn" type="button">
                 <span data-icon="calendarToday" aria-hidden="true"></span>今天
               </button>
             </div>
 
             <!-- 月进度 -->
-            <div class="month-progress" id="monthProgress">
-              <div class="month-progress__meta">
-                <span class="month-progress__spent t-title1 t-numeric" id="monthSpent">¥0</span>
-                <span class="month-progress__budget t-numeric" id="monthBudget">/ ¥5,000</span>
-                <span class="month-progress__ratio" id="monthRatio">0%</span>
+            <div class="month-progress card" id="monthProgress">
+              <div class="month-progress__row">
+                <div class="month-progress__col">
+                  <p class="month-progress__caption">本月支出</p>
+                  <div class="month-progress__meta">
+                    <span class="month-progress__spent t-title1 t-numeric" id="monthSpent">¥0</span>
+                    <span class="month-progress__budget t-caption t-numeric" id="monthBudget">/ ¥5,000</span>
+                  </div>
+                </div>
+                <div class="month-progress__ratio" id="monthRatio">0%</div>
               </div>
               <div
                 class="month-progress__track"
@@ -50,6 +58,7 @@
               >
                 <div class="month-progress__fill" id="progressFill"></div>
               </div>
+              <p class="month-progress__hint t-footnote" id="monthHint">设定一个预算，跟踪每月支出</p>
             </div>
           </header>
 
@@ -69,7 +78,7 @@
               <ul class="detail-list" id="detailList"></ul>
               <div class="detail-total">
                 <span class="detail-total__label">合计</span>
-                <span class="detail-total__value" id="detailTotal">¥0</span>
+                <span class="detail-total__value t-numeric" id="detailTotal">¥0</span>
               </div>
             </div>
           </div>
@@ -80,7 +89,10 @@
              ============================================================ -->
         <section class="page" data-page="settings" id="page-settings" aria-label="设置">
           <header class="settings-header">
-            <h1 class="t-hero">设置</h1>
+            <div class="settings-header__row">
+              <h1 class="t-hero">设置</h1>
+            </div>
+            <p class="settings-header__hint">把所有账号信息留在本地，仅在你主动调用时才会发送到 API。</p>
           </header>
 
           <div class="page-body">
@@ -127,14 +139,21 @@
 
               <div class="settings-row settings-row--field">
                 <label class="settings-field__caption" for="modelName">模型名称</label>
-                <input
-                  class="settings-input"
-                  id="modelName"
-                  type="text"
-                  spellcheck="false"
-                  autocapitalize="off"
-                  placeholder="gpt-6-astra"
-                />
+                <div class="settings-input-row">
+                  <input
+                    class="settings-input"
+                    id="modelName"
+                    type="text"
+                    spellcheck="false"
+                    autocapitalize="off"
+                    placeholder="gpt-6-astra"
+                    list="modelList"
+                  />
+                  <button class="show-key-btn" id="fetchModels" type="button" aria-label="拉取模型">
+                    <span data-icon="refresh" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <datalist id="modelList"></datalist>
               </div>
 
               <button class="settings-row is-button" id="testBtn" type="button">
@@ -149,7 +168,7 @@
               <div class="test-result" id="testResult" role="status" aria-live="polite"></div>
             </div>
 
-            <p class="settings-group-label">其他</p>
+            <p class="settings-group-label">偏好</p>
             <div class="settings-group">
               <button class="settings-row is-button" id="rowWeekStart" type="button">
                 <span class="settings-row__label">周起始日</span>
@@ -166,15 +185,15 @@
                 <span class="settings-row__value" id="categoryValue"></span>
                 <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
               </button>
+            </div>
+
+            <p class="settings-group-label">数据</p>
+            <div class="settings-group">
               <button class="settings-row is-button" id="rowExport" type="button">
                 <span class="settings-row__label">数据导出</span>
                 <span class="settings-row__value">JSON / CSV</span>
                 <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
               </button>
-            </div>
-
-            <p class="settings-group-label">危险操作</p>
-            <div class="settings-group">
               <button class="settings-row is-button settings-row--danger" id="rowClear" type="button">
                 <span class="settings-row__label">清空全部账单</span>
               </button>

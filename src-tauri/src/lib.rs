@@ -23,6 +23,14 @@ pub struct TestResult {
     pub model: String,
 }
 
+/// 模型列表接口返回体
+#[derive(Serialize, Debug, Clone)]
+pub struct ModelsResult {
+    pub ok: bool,
+    pub message: String,
+    pub models: Vec<String>,
+}
+
 const DEFAULT_CLAUDE_URL: &str = "https://api.anthropic.com";
 const DEFAULT_OPENAI_URL: &str = "https://api.openai.com";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -441,11 +449,235 @@ async fn test_connection(
     }
 }
 
+/// 把 Base URL 规整成 `/v1/models` 端点
+fn models_endpoint(protocol: &str, base_url: &str) -> String {
+    let raw = base_url.trim().trim_end_matches('/');
+    let base = if raw.is_empty() {
+        default_base_url(protocol).to_string()
+    } else {
+        raw.to_string()
+    };
+    if base.ends_with("/models") {
+        base
+    } else if base.ends_with("/v1") {
+        format!("{}/models", base)
+    } else {
+        format!("{}/v1/models", base)
+    }
+}
+
+/// 从 `/v1/models` 接口拉取可用模型列表（OpenAI 兼容协议）
+#[command]
+async fn list_models(protocol: String, base_url: String, api_key: String) -> Result<ModelsResult, String> {
+    let protocol = normalize_protocol(&protocol);
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Ok(ModelsResult {
+            ok: false,
+            message: "请先填写 API Key".into(),
+            models: vec![],
+        });
+    }
+
+    let url = models_endpoint(protocol, &base_url);
+    let http = client()?;
+
+    let response = http
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("anthropic-version", ANTHROPIC_VERSION) // Anthropic 忽略，多写无害
+        .send()
+        .await
+        .map_err(|e| format!("网络请求失败: {}", e))?;
+
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("响应不是合法 JSON（HTTP {}）: {}", status, e))?;
+
+    if !status.is_success() {
+        return Ok(ModelsResult {
+            ok: false,
+            message: format!("接口返回 HTTP {}：{}", status, error_message(&body)),
+            models: vec![],
+        });
+    }
+
+    // 兼容多种字段命名
+    let models: Vec<String> = if let Some(items) = body.get("data").and_then(|v| v.as_array()) {
+        items
+            .iter()
+            .filter_map(|item| {
+                item.get("id")
+                    .or_else(|| item.get("name"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+            .collect()
+    } else if let Some(items) = body.get("models").and_then(|v| v.as_array()) {
+        items
+            .iter()
+            .filter_map(|item| {
+                item.get("id")
+                    .or_else(|| item.get("name"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+            .collect()
+    } else if let Some(items) = body.as_array() {
+        items
+            .iter()
+            .filter_map(|item| {
+                item.get("id")
+                    .or_else(|| item.get("name"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let mut models = models;
+    models.sort();
+    models.dedup();
+
+    if models.is_empty() {
+        return Ok(ModelsResult {
+            ok: false,
+            message: "接口返回成功，但没有解析出任何模型 ID".into(),
+            models: vec![],
+        });
+    }
+
+    Ok(ModelsResult {
+        ok: true,
+        message: format!("已获取 {} 个模型", models.len()),
+        models,
+    })
+}
+
+/// 把麦克风录制的音频转写为文字（OpenAI 兼容 Whisper 接口）。
+/// `audio_base64` 是 data:audio/...;base64,XXXX 中的 base64 部分；`mime` 是 MIME 类型。
+#[command]
+async fn transcribe_audio(
+    protocol: String,
+    base_url: String,
+    api_key: String,
+    api_model: String,
+    audio_base64: String,
+    mime: String,
+) -> Result<String, String> {
+    let protocol = normalize_protocol(&protocol);
+    if api_key.trim().is_empty() {
+        return Err("请先在设置页填写 API Key".into());
+    }
+    if api_model.trim().is_empty() {
+        return Err("请先在设置页填写模型名称".into());
+    }
+    if audio_base64.trim().is_empty() {
+        return Err("未收到音频数据".into());
+    }
+
+    // 把 base64 解码成字节
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(audio_base64.trim())
+        .map_err(|e| format!("音频数据不是合法 base64: {}", e))?;
+
+    // 取后缀（webm/m4a/wav/mp3/ogg/amr）作为 filename
+    let suffix = mime
+        .split('/')
+        .nth(1)
+        .map(|s| s.split(';').next().unwrap_or(""))
+        .unwrap_or("webm")
+        .to_ascii_lowercase();
+    // 限定白名单：避免 `audio/x-m4a` 等被 OpenAI 当作未知类型拒绝
+    let suffix = match suffix.as_str() {
+        "x-m4a" | "m4a" => "m4a",
+        "mp4" | "mpeg" => "mp4",
+        "wav" | "x-wav" => "wav",
+        "mp3" => "mp3",
+        "ogg" | "oga" => "ogg",
+        other if other.is_empty() => "webm",
+        other => other,
+    };
+    let file_name = format!("audio.{}", suffix);
+
+    // 复用 endpoint() 拼出 base，覆写为 /audio/transcriptions
+    let raw = base_url.trim().trim_end_matches('/');
+    let base = if raw.is_empty() {
+        default_base_url(protocol).to_string()
+    } else {
+        raw.to_string()
+    };
+    let base = if base.ends_with("/audio/transcriptions") {
+        base
+    } else if base.ends_with("/v1") {
+        format!("{}/audio/transcriptions", base)
+    } else {
+        format!("{}/v1/audio/transcriptions", base)
+    };
+
+    let http = client()?;
+    let part = reqwest::multipart::Part::bytes(bytes)
+        .file_name(file_name)
+        .mime_str(&mime)
+        .map_err(|e| format!("构造音频上传失败: {}", e))?;
+    let form = reqwest::multipart::Form::new()
+        .text("model", api_model.trim().to_string())
+        .part("file", part);
+
+    let response = http
+        .post(&base)
+        .header("Authorization", format!("Bearer {}", api_key.trim()))
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("语音识别网络请求失败: {}", e))?;
+
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("语音识别响应不是合法 JSON（HTTP {}）: {}", status, e))?;
+
+    if !status.is_success() {
+        return Err(format!(
+            "语音识别接口返回 HTTP {}：{}",
+            status,
+            error_message(&body)
+        ));
+    }
+
+    // 兼容 { "text": "..." } 与 { choices:[...]} 两种格式
+    if let Some(t) = body.get("text").and_then(|v| v.as_str()) {
+        return Ok(t.to_string());
+    }
+    if let Some(text) = body["choices"][0]["message"]["content"].as_str() {
+        return Ok(text.to_string());
+    }
+    if let Some(text) = body["choices"][0]["text"].as_str() {
+        return Ok(text.to_string());
+    }
+
+    Err(format!(
+        "无法从响应里提取转写文本：{}",
+        truncate(&body.to_string(), 300)
+    ))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![process_accounting, test_connection])
+        .invoke_handler(tauri::generate_handler![
+            process_accounting,
+            test_connection,
+            list_models,
+            transcribe_audio
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
