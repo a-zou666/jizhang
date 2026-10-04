@@ -1,0 +1,155 @@
+/* ==========================================================================
+   AI 记账 · 设计令牌 (Design Tokens)
+   严格对应《UI 设计规范》第一 ~ 五节、第十一 ~ 十二节
+   注：规范中的 pt 在 CSS 中按 1:1 映射为 px（iOS pt ≈ CSS px @1x）
+   ========================================================================== */
+
+:root {
+  /* ---------------- 二、色彩系统 ---------------- */
+  --color-primary: #2dd4bf;        /* teal-400 强调色、高亮、按钮、活跃态 */
+  --color-primary-dark: #14b8a6;   /* teal-500 按下态、进度条填充 */
+  --color-primary-soft: #f0fdfa;   /* 选中日期格子底色 */
+  --color-primary-tint: rgba(45, 212, 191, 0.12);
+
+  --color-bg: #f5f5f7;             /* 全局页面底色 */
+  --color-card: #ffffff;           /* 卡片、弹窗、输入框底色 */
+
+  --color-text-primary: #1c1c1e;   /* 主标题、金额、重要文字 */
+  --color-text-secondary: #8e8e93; /* 副标题、日期、提示语 */
+  --color-text-tertiary: #c7c7cc;  /* 占位符、禁用态 */
+
+  --color-border: #e5e5ea;         /* 分割线、卡片边框 */
+  --color-danger: #ff3b30;         /* 删除、超预算警告 */
+  --color-success: #34c759;        /* 收入、确认成功 */
+
+  --color-press: rgba(0, 0, 0, 0.045);          /* 列表按下反馈 */
+  --color-backdrop: rgba(0, 0, 0, 0.32);        /* 弹窗背景渐暗 */
+
+  /* 分类色板（6 色循环） */
+  --cat-1: #ff6b6b;  /* 餐饮 */
+  --cat-2: #4ecdc4;  /* 交通 */
+  --cat-3: #45b7d1;  /* 数码 */
+  --cat-4: #96ceb4;  /* 日用 */
+  --cat-5: #ffeaa7;  /* 娱乐 */
+  --cat-6: #dda0dd;  /* 其他 */
+
+  /* ---------------- 三、字体规范（iOS SF Pro 基准） ---------------- */
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --font-numeric: var(--font-family);
+
+  --text-hero-size: 34px;    --text-hero-line: 41px;    --text-hero-weight: 700;  /* 大标题 */
+  --text-title1-size: 28px;  --text-title1-line: 34px;  --text-title1-weight: 600;/* 标题1 月总支出 */
+  --text-title2-size: 22px;  --text-title2-line: 28px;  --text-title2-weight: 600;/* 标题2 格子内金额 */
+  --text-title3-size: 20px;  --text-title3-line: 25px;  --text-title3-weight: 500;/* 标题3 明细物品名 */
+  --text-body-size: 17px;    --text-body-line: 22px;    --text-body-weight: 400;  /* 正文 */
+  --text-caption-size: 15px; --text-caption-line: 20px; --text-caption-weight: 400;/* 标注 日期 */
+  --text-footnote-size: 13px;--text-footnote-line: 18px;--text-footnote-weight: 400;/* 小字 */
+  --text-tab-size: 10px;     --text-tab-line: 12px;                              /* 底部导航文字 */
+
+  /* ---------------- 四、间距系统（4pt 基准） ---------------- */
+  --spacing-xs: 4px;    /* 图标与文字间距 */
+  --spacing-sm: 8px;    /* 紧凑元素间距 */
+  --spacing-md: 12px;   /* 列表项内间距 */
+  --spacing-lg: 16px;   /* 卡片内边距 */
+  --spacing-xl: 24px;   /* 区块之间 */
+  --spacing-2xl: 32px;  /* 页面左右边距 */
+
+  /* 圆角 */
+  --radius-sm: 8px;     /* 标签、小按钮 */
+  --radius-md: 12px;    /* 列表项、输入框 */
+  --radius-lg: 16px;    /* 卡片、弹窗 */
+  --radius-xl: 24px;    /* 底部浮窗、大卡片 */
+  --radius-full: 999px; /* 圆形按钮、头像 */
+
+  /* ---------------- 五、阴影 ---------------- */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.16);
+
+  /* ---------------- 六、底部导航 ---------------- */
+  --tabbar-height: 49px;
+  --tabbar-bg: rgba(255, 255, 255, 0.85);
+  --tabbar-blur: 20px;
+  --tabbar-border: 0.5px;
+
+  /* 悬浮输入条 */
+  --composer-height: 48px;
+  --confirm-button-height: 50px;
+
+  /* ---------------- 十一、动效规范 ---------------- */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --motion-page: 300ms;      /* 页面切换：水平滑入 */
+  --motion-sheet: 250ms;     /* 弹窗出现：底部上滑 + 背景渐暗 */
+  --motion-cell: 150ms;      /* 日历格子点击：0.95 → 1.0 */
+  --motion-composer: 200ms;  /* 输入条激活：上移 + 展开 */
+  --motion-fly: 350ms;       /* 确认入账：条目飞入日历格子 */
+
+  /* ---------------- 十二、图标规范 ---------------- */
+  --icon-stroke-width: 1.5;
+  --icon-nav: 24px;      /* 导航 */
+  --icon-nav-idle: 22px; /* 未选导航 */
+  --icon-list: 20px;     /* 列表 */
+  --icon-inline: 16px;   /* 内联 */
+
+  /* ---------------- 安全区 / 布局 ---------------- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --content-inset: var(--spacing-2xl);
+}
+
+/* ---------------- 排版工具类 ---------------- */
+.t-hero {
+  font-size: var(--text-hero-size);
+  line-height: var(--text-hero-line);
+  font-weight: var(--text-hero-weight);
+  letter-spacing: -0.4px;
+}
+.t-title1 {
+  font-size: var(--text-title1-size);
+  line-height: var(--text-title1-line);
+  font-weight: var(--text-title1-weight);
+  letter-spacing: -0.3px;
+}
+.t-title2 {
+  font-size: var(--text-title2-size);
+  line-height: var(--text-title2-line);
+  font-weight: var(--text-title2-weight);
+}
+.t-title3 {
+  font-size: var(--text-title3-size);
+  line-height: var(--text-title3-line);
+  font-weight: var(--text-title3-weight);
+}
+.t-body {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-weight: var(--text-body-weight);
+}
+.t-caption {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-caption-weight);
+}
+.t-footnote {
+  font-size: var(--text-footnote-size);
+  line-height: var(--text-footnote-line);
+  font-weight: var(--text-footnote-weight);
+}
+.t-numeric {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+
+/* 降级：用户系统关闭动效 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-page: 1ms;
+    --motion-sheet: 1ms;
+    --motion-cell: 1ms;
+    --motion-composer: 1ms;
+    --motion-fly: 1ms;
+  }
+}
