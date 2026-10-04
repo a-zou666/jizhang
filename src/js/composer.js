@@ -26,6 +26,7 @@ export function bindComposer({ onNeedSettings } = {}) {
   let recordedChunks = [];
   let recordedMime = "";
   let recorderStream = null;
+  let voicePressHeld = false;
 
   /* ---------------- 输入激活态：麦克风 → 发送 ---------------- */
   function setSendMode(on) {
@@ -251,12 +252,21 @@ export function bindComposer({ onNeedSettings } = {}) {
     }
   }
 
+  action.addEventListener("pointerdown", () => {
+    if (!sendMode) voicePressHeld = true;
+  });
+
   attachLongPress(
     action,
     async () => {
-      if (sendMode || busy) return;
+      if (sendMode || busy || !voicePressHeld) return;
       const engine = await startVoice();
       if (!engine?.instance) return;
+      if (!voicePressHeld) {
+        if (engine.kind === "web") engine.instance.stop();
+        else await stopMediaRecorder(engine.instance);
+        return;
+      }
       recognition = engine;
       if (engine.kind === "media") showRecording();
       else showWave();
@@ -264,8 +274,9 @@ export function bindComposer({ onNeedSettings } = {}) {
     { ms: 260, tolerance: 14 },
   );
 
-  for (const type of ["pointerup", "pointercancel", "pointerleave"]) {
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
     action.addEventListener(type, () => {
+      voicePressHeld = false;
       stopVoice();
     });
   }

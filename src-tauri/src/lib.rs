@@ -102,7 +102,7 @@ async fn request_model(
         return Err("请先在设置页填写 API Key".into());
     }
     if api_model.trim().is_empty() {
-        return Err("请先在设置页填写模型名称".into());
+        return Err("请先在设置页拉取并选择模型".into());
     }
 
     let url = endpoint(protocol, base_url);
@@ -574,7 +574,7 @@ async fn transcribe_audio(
         return Err("请先在设置页填写 API Key".into());
     }
     if api_model.trim().is_empty() {
-        return Err("请先在设置页填写模型名称".into());
+        return Err("请先在设置页拉取并选择模型".into());
     }
     if audio_base64.trim().is_empty() {
         return Err("未收到音频数据".into());

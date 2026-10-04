@@ -17,6 +17,20 @@ import {
 import { closeModal, confirmDialog, openModal, pickOption, promptText, toast } from "./ui.js";
 import { $, dateKey, el, round2, yuan } from "./util.js";
 
+const fetchedModels = new Map();
+
+function syncModelOptions(selectedModel = "") {
+  const select = $("#modelName");
+  const models = [...(fetchedModels.get(getSettings().baseUrl) ?? [])];
+  if (selectedModel && !models.includes(selectedModel)) models.unshift(selectedModel);
+  select.replaceChildren(
+    el("option", { value: "", text: models.length ? "请选择模型" : "先拉取可用模型" }),
+    ...models.map((id) => el("option", { value: id, text: id })),
+  );
+  select.disabled = models.length === 0;
+  select.value = selectedModel && models.includes(selectedModel) ? selectedModel : "";
+}
+
 /* ---------------- 渲染 ---------------- */
 export function renderSettings() {
   const settings = getSettings();
@@ -24,7 +38,7 @@ export function renderSettings() {
   $("#protocolValue").textContent = PROTOCOL_PRESETS[settings.protocol].label;
   syncInput($("#baseUrl"), settings.baseUrl);
   syncInput($("#apiKey"), settings.apiKey);
-  syncInput($("#modelName"), settings.model);
+  syncModelOptions(settings.model);
 
   $("#weekStartValue").textContent = settings.weekStart === 0 ? "周日" : "周一";
   $("#budgetValue").textContent = yuan(settings.budget);
@@ -63,7 +77,7 @@ export function bindSettings() {
 
   /* API 参数 */
   $("#baseUrl").addEventListener("change", (event) => setSettings({ baseUrl: event.target.value.trim() }));
-  $("#modelName").addEventListener("change", (event) => setSettings({ model: event.target.value.trim() }));
+  $("#modelName").addEventListener("change", (event) => setSettings({ model: event.target.value }));
   $("#apiKey").addEventListener("change", (event) => setSettings({ apiKey: event.target.value.trim() }));
 
   $("#toggleKey").addEventListener("click", () => {
@@ -88,25 +102,22 @@ export function bindSettings() {
     const loading = toast("正在拉取模型…");
     try {
       const result = await listModels(current);
-      const dataList = $("#modelList");
       const input = $("#modelName");
 
       if (!result.ok) {
-        dataList.replaceChildren();
         toast(result.message || "拉取模型失败", "error");
         return;
       }
       if (!result.models.length) {
-        dataList.replaceChildren();
         toast("没有可用的模型", "error");
         return;
       }
-      dataList.replaceChildren(
-        ...result.models.map((id) => el("option", { value: id, text: id })),
-      );
-      // 输入框保留 datalist 自动补全 + 自由填写；现有值不在列表时也保留
-      if (current.model) input.value = current.model;
-      toast(`已加载 ${result.models.length} 个模型`, "ok");
+      const models = [...new Set(result.models.map((model) => model.trim()).filter(Boolean))];
+      fetchedModels.set(current.baseUrl, models);
+      const selected = models.includes(current.model) ? current.model : models[0];
+      syncModelOptions(selected);
+      setSettings({ model: selected });
+      toast(`已加载 ${models.length} 个模型`, "ok");
     } finally {
       btn.disabled = false;
       loading.remove();

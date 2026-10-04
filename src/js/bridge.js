@@ -77,7 +77,7 @@ export async function listModels(settings) {
     // 浏览器环境：给出兜底建议列表
     return {
       ok: true,
-      message: "本地预览：未连接后端，请直接填写模型名称",
+      message: "本地预览：使用示例模型列表；实际模型请在 Android App 中拉取",
       models: [
         "gpt-4o-mini",
         "gpt-4o",

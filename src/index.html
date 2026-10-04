@@ -138,22 +138,15 @@
               </div>
 
               <div class="settings-row settings-row--field">
-                <label class="settings-field__caption" for="modelName">模型名称</label>
+                <label class="settings-field__caption" for="modelName">选择模型</label>
                 <div class="settings-input-row">
-                  <input
-                    class="settings-input"
-                    id="modelName"
-                    type="text"
-                    spellcheck="false"
-                    autocapitalize="off"
-                    placeholder="gpt-6-astra"
-                    list="modelList"
-                  />
-                  <button class="show-key-btn" id="fetchModels" type="button" aria-label="拉取模型">
+                  <select class="settings-input" id="modelName" disabled aria-label="选择 API 模型">
+                    <option value="">先拉取可用模型</option>
+                  </select>
+                  <button class="show-key-btn" id="fetchModels" type="button" aria-label="拉取模型" title="拉取模型">
                     <span data-icon="refresh" aria-hidden="true"></span>
                   </button>
                 </div>
-                <datalist id="modelList"></datalist>
               </div>
 
               <button class="settings-row is-button" id="testBtn" type="button">
