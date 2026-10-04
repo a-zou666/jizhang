@@ -187,7 +187,9 @@
   /* ============ 外观配置编译出的主题色（由 appearance.js 覆盖） ============ */
   /* 这里的默认值 = 默认主题色 #00C2FF 编译出来的结果，可在 appearance.js
      的 accentTokens() 里核对；--app-accent-btn 是「按钮实心底色」，
-     --app-on-accent 是压在上面的文字色，两者保证 ≥4.5:1。 */
+     --app-on-accent 是压在上面的文字色，两者保证 ≥4.5:1。
+     --app-accent-grad 是「主题色 → 主题色提亮 → 主题色暖化」的多停渐变，
+     应用于 .spend-overview / .primary-btn / .settings-section__bar 等强调块。 */
   --app-accent: #00C2FF;
   --app-accent-rgb: 0 194 255;
   --app-accent-soft: rgba(0, 194, 255, 0.14);
@@ -195,6 +197,9 @@
   --app-accent-strong: #00C2FF;
   --app-accent-btn: #00C2FF;
   --app-accent-btn-2: #42D2FF;
+  --app-accent-warm: #6E8BFF;
+  --app-accent-grad: linear-gradient(135deg, #00C2FF 0%, #42D2FF 48%, #6E8BFF 100%);
+  --app-accent-grad-soft: linear-gradient(135deg, rgba(0, 194, 255, 0.18) 0%, rgba(66, 210, 255, 0.18) 48%, rgba(110, 139, 255, 0.18) 100%);
   --app-on-accent: #0B1220;
   --app-accent-ink: #00759A;
 }

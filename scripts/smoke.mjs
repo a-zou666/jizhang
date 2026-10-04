@@ -327,23 +327,28 @@ const persisted = storage.get("ai-ledger/v1");
 if (!persisted || !JSON.parse(persisted).appearance.home) fail("外观未持久化到 localStorage");
 else ok("外观已持久化到 localStorage");
 
-/* --- 语音退化逻辑：麦克风被拒时不应再试第二个引擎（本次修复核心） --- */
+/* --- 语音输入已下线：composer.js 不应再触发任何录音/转写逻辑 --- */
 documentStub.body.append(makeNode("div", documentStub)); // toastRoot 兜底
 const composerSource = readFileSync(resolve(ROOT, "src/js/composer.js"), "utf8");
-if (/if \(result\.errored\) return null;/.test(composerSource)) {
-  ok("startVoice：引擎报错后立即返回，不再叠加第二次尝试");
-} else fail("startVoice 缺少 errored 短路逻辑");
+const bridgeSource = readFileSync(resolve(ROOT, "src/js/bridge.js"), "utf8");
+const indexSource = readFileSync(resolve(ROOT, "src/index.html"), "utf8");
+const appearanceSource = readFileSync(resolve(ROOT, "src/js/appearance.js"), "utf8");
 
-if (composerSource.includes("startWebSpeech()") && composerSource.includes("startMediaRecorder()")) {
-  ok("startVoice 仍保留两个引擎");
-} else fail("startVoice 引擎丢失");
+if (/SpeechRecognition|webkitSpeechRecognition|MediaRecorder|navigator\.mediaDevices/.test(composerSource)) {
+  fail("composer.js 仍残留语音引擎相关代码（已下线）");
+} else ok("composer.js 完全移除了语音引擎代码");
 
-if (!/case "NotAllowedError"/.test(composerSource)) fail("缺少 NotAllowedError 的可操作提示");
-else ok("麦克风错误映射到中文可操作提示");
+if (/transcribeAudio|transcribe_audio|blobToBase64/.test(bridgeSource)) {
+  fail("bridge.js 仍导出 transcribeAudio 或保留 blobToBase64");
+} else ok("bridge.js 移除了音频转写导出");
 
-if (/ToastError|voice-wave/.test(composerSource) === false) {
-  ok("composer.js 未触碰 voice-wave 样式契约");
-}
+if (/id="voiceWave"|class="voice-wave"/.test(indexSource)) {
+  fail("index.html 仍保留 voice-wave 节点");
+} else ok("index.html 移除了 voice-wave 节点");
+
+if (/#app \.voice-wave/.test(appearanceSource)) {
+  fail("appearance.js 的 SCOPE_SELECTORS 仍包含 voice-wave");
+} else ok("appearance.js 的 SCOPE_SELECTORS 已不再依赖 voice-wave");
 
 /* --- 端到端：真实 app.js 启动流程（覆盖 home/calendar/detail/settings/composer 装配） --- */
 let appStarted = false;
@@ -426,6 +431,12 @@ const contract = [
   [".t-footnote", "t-footnote 排版类"],
   [".appearance-swatch", "主题色色板"],
   [".appearance-tab", "外观视图标签"],
+  [".glass-sheen", "柔光玻璃顶部高光"],
+  [".glass-sheen::after", "柔光玻璃角部高光"],
+  [".soft-glass", "柔光玻璃表面（分层叠加）"],
+  [".settings-group--accent", "设置分组（带渐变色块标题）"],
+  ["--app-accent", "主品牌色令牌（渐变源）"],
+  ["--app-accent-grad", "主品牌渐变字符串令牌"],
 ];
 const missingCss = contract.filter(([sel]) => !appCss.includes(sel) && !tokenCss.includes(sel));
 if (missingCss.length) fail("CSS 缺少关键类", missingCss.map(([s, d]) => `${s}(${d})`).join(", "));

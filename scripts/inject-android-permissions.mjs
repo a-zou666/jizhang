@@ -1,20 +1,14 @@
 #!/usr/bin/env node
 /**
- * 向 tauri android init 生成的 AndroidManifest.xml 注入录音（麦克风）权限。
+ * 向 tauri android init 生成的 AndroidManifest.xml 注入权限占位。
  *
- * 背景：Tauri/Wry 的 RustWebChromeClient 在网页请求麦克风时，会走原生运行时权限流程
- * （RequestMultiplePermissions）弹出系统授权框 —— 但前提是权限已在清单里声明。
- * Tauri 自带的 Android 库清单是空的，应用模板也不声明 RECORD_AUDIO，导致 Android
- * 直接拒绝（用户看不到授权弹窗），WebView 随即把 getUserMedia 判为 NotAllowedError。
- *
- * 因此生成工程后必须补上：
- *   - android.permission.RECORD_AUDIO          录音（麦克风）
- *   - android.permission.MODIFY_AUDIO_SETTINGS 音频设置（Wry 一并申请的配套权限）
+ * 当前应用不再使用麦克风输入（语音录入已下线），所以这个脚本现在只是个
+ * 钩子壳：保留 CLI 与自检矩阵，方便后续真要加权限时直接在这里挂上。
  *
  * 用法：
- *   node scripts/inject-android-permissions.mjs [manifestPath]   # 注入（幂等）
- *   node scripts/inject-android-permissions.mjs --check          # 只检查，缺失则 exit 1
- *   node scripts/inject-android-permissions.mjs --self-test      # 跑内置用例矩阵，不碰磁盘
+ *   node scripts/inject-android-permissions.mjs [manifestPath]
+ *   node scripts/inject-android-permissions.mjs --check
+ *   node scripts/inject-android-permissions.mjs --self-test
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -35,10 +29,7 @@ const DEFAULT_MANIFEST = resolve(
 );
 
 /** 必须声明的权限，顺序即写入顺序 */
-export const REQUIRED_PERMISSIONS = [
-  "android.permission.RECORD_AUDIO",
-  "android.permission.MODIFY_AUDIO_SETTINGS",
-];
+export const REQUIRED_PERMISSIONS = [];
 
 const MANIFEST_OPEN = /<manifest\b[^>]*>/;
 
@@ -118,26 +109,24 @@ function validate(xml) {
 }
 
 /* ------------------------------------------------------------------ *
- * 自检：覆盖 tauri android init 实际生成清单的各种形状
+ * 自检：REQUIRED_PERMISSIONS 为空时，脚本应当原样返回
  * ------------------------------------------------------------------ */
 const SELF_TEST_CASES = [
   {
-    name: "tauri 实际生成的清单形状（带 xmlns，裸 <manifest>）",
+    name: "空权限列表 → 幂等，零改动",
     input: [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<manifest xmlns:android="http://schemas.android.com/apk/res/android">`,
-      `    <application`,
-      `        android:label="@string/app_name"`,
-      `        android:hardwareAccelerated="true">`,
-      `        <activity android:name=".MainActivity" android:exported="true" />`,
+      `    <application android:label="app">`,
       `    </application>`,
       `</manifest>`,
       ``,
     ].join("\n"),
-    expectAdded: 2,
+    expectAdded: 0,
+    expectIdempotent: true,
   },
   {
-    name: "CRLF 换行",
+    name: "CRLF 换行原样保留",
     input: [
       `<?xml version="1.0" encoding="utf-8"?>`,
       `<manifest xmlns:android="http://schemas.android.com/apk/res/android">`,
@@ -146,7 +135,7 @@ const SELF_TEST_CASES = [
       `</manifest>`,
       ``,
     ].join("\r\n"),
-    expectAdded: 2,
+    expectAdded: 0,
     expectEol: "\r\n",
   },
   {
@@ -155,76 +144,8 @@ const SELF_TEST_CASES = [
       "\uFEFF<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
       `<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n` +
       `    <application />\n</manifest>\n`,
-    expectAdded: 2,
+    expectAdded: 0,
     expectBom: true,
-  },
-  {
-    name: "已有其他 uses-permission（INTERNET），保留原样",
-    input: [
-      `<?xml version="1.0" encoding="utf-8"?>`,
-      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">`,
-      `    <uses-permission android:name="android.permission.INTERNET" />`,
-      `    <application />`,
-      `</manifest>`,
-      ``,
-    ].join("\n"),
-    expectAdded: 2,
-    expectKeeps: `android:name="android.permission.INTERNET"`,
-  },
-  {
-    name: "只缺一个权限",
-    input: [
-      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">`,
-      `    <uses-permission android:name="android.permission.RECORD_AUDIO" />`,
-      `    <application />`,
-      `</manifest>`,
-      ``,
-    ].join("\n"),
-    expectAdded: 1,
-  },
-  {
-    name: "两个权限都有 → 幂等，零改动",
-    input: [
-      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">`,
-      `    <uses-permission android:name="android.permission.RECORD_AUDIO" />`,
-      `    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />`,
-      `    <application />`,
-      `</manifest>`,
-      ``,
-    ].join("\n"),
-    expectAdded: 0,
-    expectIdempotent: true,
-  },
-  {
-    name: "权限写在注释里 → 视为缺失，必须真注入",
-    input: [
-      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">`,
-      `    <!-- <uses-permission android:name="android.permission.RECORD_AUDIO" /> -->`,
-      `    <application />`,
-      `</manifest>`,
-      ``,
-    ].join("\n"),
-    expectAdded: 2,
-  },
-  {
-    name: "单引号写法 → 视为已存在，不重复插入",
-    input: [
-      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">`,
-      `    <uses-permission android:name='android.permission.RECORD_AUDIO'/>`,
-      `    <uses-permission android:name='android.permission.MODIFY_AUDIO_SETTINGS'/>`,
-      `    <application />`,
-      `</manifest>`,
-      ``,
-    ].join("\n"),
-    expectAdded: 0,
-    expectIdempotent: true,
-  },
-  {
-    name: "缩进 2 空格 + 同一行紧跟内容（无换行）",
-    input:
-      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">` +
-      `<application android:label="a" /></manifest>`,
-    expectAdded: 2,
   },
 ];
 
@@ -324,7 +245,7 @@ function main() {
       );
       process.exit(1);
     }
-    console.log("[android-permissions] 检查通过：录音权限已声明且在 <application> 之前。");
+    console.log("[android-permissions] 检查通过：当前没有需要注入的权限。");
     return;
   }
 
@@ -340,8 +261,7 @@ function main() {
   const { text, added, alreadyPresent } = result;
 
   if (!added.length) {
-    console.log("[android-permissions] 权限已存在，无需修改：");
-    for (const name of REQUIRED_PERMISSIONS) console.log(`  ✓ ${name}`);
+    console.log("[android-permissions] 当前没有需要注入的权限（REQUIRED_PERMISSIONS 为空）。");
     return;
   }
 

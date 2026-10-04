@@ -558,116 +558,6 @@ async fn list_models(protocol: String, base_url: String, api_key: String) -> Res
     })
 }
 
-/// 把麦克风录制的音频转写为文字（OpenAI 兼容 Whisper 接口）。
-/// `audio_base64` 是 data:audio/...;base64,XXXX 中的 base64 部分；`mime` 是 MIME 类型。
-#[command]
-async fn transcribe_audio(
-    protocol: String,
-    base_url: String,
-    api_key: String,
-    api_model: String,
-    audio_base64: String,
-    mime: String,
-) -> Result<String, String> {
-    let protocol = normalize_protocol(&protocol);
-    if api_key.trim().is_empty() {
-        return Err("请先在设置页填写 API Key".into());
-    }
-    if api_model.trim().is_empty() {
-        return Err("请先在设置页拉取并选择模型".into());
-    }
-    if audio_base64.trim().is_empty() {
-        return Err("未收到音频数据".into());
-    }
-
-    // 把 base64 解码成字节
-    use base64::Engine as _;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(audio_base64.trim())
-        .map_err(|e| format!("音频数据不是合法 base64: {}", e))?;
-
-    // 取后缀（webm/m4a/wav/mp3/ogg/amr）作为 filename
-    let suffix = mime
-        .split('/')
-        .nth(1)
-        .map(|s| s.split(';').next().unwrap_or(""))
-        .unwrap_or("webm")
-        .to_ascii_lowercase();
-    // 限定白名单：避免 `audio/x-m4a` 等被 OpenAI 当作未知类型拒绝
-    let suffix = match suffix.as_str() {
-        "x-m4a" | "m4a" => "m4a",
-        "mp4" | "mpeg" => "mp4",
-        "wav" | "x-wav" => "wav",
-        "mp3" => "mp3",
-        "ogg" | "oga" => "ogg",
-        other if other.is_empty() => "webm",
-        other => other,
-    };
-    let file_name = format!("audio.{}", suffix);
-
-    // 复用 endpoint() 拼出 base，覆写为 /audio/transcriptions
-    let raw = base_url.trim().trim_end_matches('/');
-    let base = if raw.is_empty() {
-        default_base_url(protocol).to_string()
-    } else {
-        raw.to_string()
-    };
-    let base = if base.ends_with("/audio/transcriptions") {
-        base
-    } else if base.ends_with("/v1") {
-        format!("{}/audio/transcriptions", base)
-    } else {
-        format!("{}/v1/audio/transcriptions", base)
-    };
-
-    let http = client()?;
-    let part = reqwest::multipart::Part::bytes(bytes)
-        .file_name(file_name)
-        .mime_str(&mime)
-        .map_err(|e| format!("构造音频上传失败: {}", e))?;
-    let form = reqwest::multipart::Form::new()
-        .text("model", api_model.trim().to_string())
-        .part("file", part);
-
-    let response = http
-        .post(&base)
-        .header("Authorization", format!("Bearer {}", api_key.trim()))
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| format!("语音识别网络请求失败: {}", e))?;
-
-    let status = response.status();
-    let body: Value = response
-        .json()
-        .await
-        .map_err(|e| format!("语音识别响应不是合法 JSON（HTTP {}）: {}", status, e))?;
-
-    if !status.is_success() {
-        return Err(format!(
-            "语音识别接口返回 HTTP {}：{}",
-            status,
-            error_message(&body)
-        ));
-    }
-
-    // 兼容 { "text": "..." } 与 { choices:[...]} 两种格式
-    if let Some(t) = body.get("text").and_then(|v| v.as_str()) {
-        return Ok(t.to_string());
-    }
-    if let Some(text) = body["choices"][0]["message"]["content"].as_str() {
-        return Ok(text.to_string());
-    }
-    if let Some(text) = body["choices"][0]["text"].as_str() {
-        return Ok(text.to_string());
-    }
-
-    Err(format!(
-        "无法从响应里提取转写文本：{}",
-        truncate(&body.to_string(), 300)
-    ))
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -675,8 +565,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             process_accounting,
             test_connection,
-            list_models,
-            transcribe_audio
+            list_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

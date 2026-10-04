@@ -54,7 +54,7 @@
             </section>
 
             <!-- 日历网格 -->
-            <section class="panel calendar-panel glass-sheen" id="calendarCard">
+            <section class="panel calendar-panel glass-sheen soft-glass" id="calendarCard">
               <header class="panel__head">
                 <h2
                   class="panel__title t-title3 month-btn"
@@ -73,7 +73,7 @@
             </section>
 
             <!-- 明细列表 -->
-            <section class="panel detail-panel glass-sheen">
+            <section class="panel detail-panel glass-sheen soft-glass">
               <header class="panel__head">
                 <h2 class="panel__title t-title3" id="detailTitle">今日明细</h2>
                 <span class="panel__count t-footnote" id="detailCount"></span>
@@ -101,104 +101,153 @@
           </header>
 
           <div class="page-body">
-            <p class="settings-group-label">API 配置</p>
-            <div class="settings-group">
-              <button
-                class="settings-row is-button"
-                id="rowProtocol"
-                type="button"
-                aria-haspopup="dialog"
-              >
-                <span class="settings-row__label">协议类型</span>
-                <span class="settings-row__value" id="protocolValue">OpenAI 兼容</span>
-                <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
-              </button>
+            <div class="settings-section" data-section="connection">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">连接</p>
+                  <p class="settings-section__desc">配置 AI 解析服务，让一句话就能变成记账记录</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--accent settings-group--glass soft-glass">
+                <button
+                  class="settings-row is-button"
+                  id="rowProtocol"
+                  type="button"
+                  aria-haspopup="dialog"
+                >
+                  <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
+                  <span class="settings-row__label">协议类型</span>
+                  <span class="settings-row__value" id="protocolValue">OpenAI 兼容</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
 
-              <div class="settings-row settings-row--field">
-                <label class="settings-field__caption" for="baseUrl">Base URL</label>
-                <input
-                  class="settings-input"
-                  id="baseUrl"
-                  type="url"
-                  inputmode="url"
-                  spellcheck="false"
-                  autocapitalize="off"
-                  placeholder="https://api.example.com"
-                />
-              </div>
-
-              <div class="settings-row settings-row--field">
-                <label class="settings-field__caption" for="apiKey">API Key</label>
-                <div class="settings-input-row">
+                <div class="settings-row settings-row--field">
+                  <label class="settings-field__caption" for="baseUrl">
+                    <span class="settings-field__icon" data-icon="chevronRight" aria-hidden="true"></span>
+                    Base URL
+                  </label>
                   <input
                     class="settings-input"
-                    id="apiKey"
-                    type="password"
+                    id="baseUrl"
+                    type="url"
+                    inputmode="url"
                     spellcheck="false"
                     autocapitalize="off"
-                    placeholder="sk-..."
+                    placeholder="https://api.example.com"
                   />
-                  <button class="show-key-btn" id="toggleKey" type="button">显示</button>
                 </div>
-              </div>
 
-              <div class="settings-row settings-row--field">
-                <label class="settings-field__caption" for="modelName">选择模型</label>
-                <div class="settings-input-row">
-                  <select class="settings-input" id="modelName" disabled aria-label="选择 API 模型">
-                    <option value="">先拉取可用模型</option>
-                  </select>
-                  <button class="show-key-btn" id="fetchModels" type="button" aria-label="拉取模型" title="拉取模型">
-                    <span data-icon="refresh" aria-hidden="true"></span>
-                  </button>
+                <div class="settings-row settings-row--field">
+                  <label class="settings-field__caption" for="apiKey">
+                    <span class="settings-field__icon" data-icon="sparkles" aria-hidden="true"></span>
+                    API Key
+                  </label>
+                  <div class="settings-input-row">
+                    <input
+                      class="settings-input"
+                      id="apiKey"
+                      type="password"
+                      spellcheck="false"
+                      autocapitalize="off"
+                      placeholder="sk-..."
+                    />
+                    <button class="show-key-btn" id="toggleKey" type="button">显示</button>
+                  </div>
                 </div>
+
+                <div class="settings-row settings-row--field">
+                  <label class="settings-field__caption" for="modelName">
+                    <span class="settings-field__icon" data-icon="chevronRight" aria-hidden="true"></span>
+                    选择模型
+                  </label>
+                  <div class="settings-input-row">
+                    <select class="settings-input" id="modelName" disabled aria-label="选择 API 模型">
+                      <option value="">先拉取可用模型</option>
+                    </select>
+                    <button class="show-key-btn" id="fetchModels" type="button" aria-label="拉取模型" title="拉取模型">
+                      <span data-icon="refresh" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </div>
+
+                <button class="settings-row is-button settings-row--action" id="testBtn" type="button">
+                  <span class="settings-row__icon" data-icon="check" aria-hidden="true"></span>
+                  <span class="settings-row__label" id="testBtnLabel">测试连接</span>
+                  <span class="settings-row__value" id="testValue"></span>
+                </button>
+                <div class="test-result" id="testResult" role="status" aria-live="polite"></div>
               </div>
-
-              <button class="settings-row is-button settings-row--action" id="testBtn" type="button">
-                <span class="settings-row__label" id="testBtnLabel">测试连接</span>
-                <span class="settings-row__value" id="testValue"></span>
-              </button>
-              <div class="test-result" id="testResult" role="status" aria-live="polite"></div>
             </div>
 
-            <p class="settings-group-label">偏好</p>
-            <div class="settings-group">
-              <button class="settings-row is-button" id="rowWeekStart" type="button">
-                <span class="settings-row__label">周起始日</span>
-                <span class="settings-row__value" id="weekStartValue">周一</span>
-                <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
-              </button>
-              <button class="settings-row is-button" id="rowBudget" type="button">
-                <span class="settings-row__label">月预算</span>
-                <span class="settings-row__value t-numeric" id="budgetValue">¥5,000</span>
-                <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
-              </button>
-              <button class="settings-row is-button" id="rowCategories" type="button">
-                <span class="settings-row__label">分类管理</span>
-                <span class="settings-row__value" id="categoryValue"></span>
-                <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
-              </button>
+            <div class="settings-section" data-section="preferences">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">偏好</p>
+                  <p class="settings-section__desc">按你的习惯调整日期、预算与分类</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--glass">
+                <button class="settings-row is-button" id="rowWeekStart" type="button">
+                  <span class="settings-row__icon" data-icon="calendarToday" aria-hidden="true"></span>
+                  <span class="settings-row__label">周起始日</span>
+                  <span class="settings-row__value" id="weekStartValue">周一</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+                <button class="settings-row is-button" id="rowBudget" type="button">
+                  <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
+                  <span class="settings-row__label">月预算</span>
+                  <span class="settings-row__value t-numeric" id="budgetValue">¥5,000</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+                <button class="settings-row is-button" id="rowCategories" type="button">
+                  <span class="settings-row__icon" data-icon="plus" aria-hidden="true"></span>
+                  <span class="settings-row__label">分类管理</span>
+                  <span class="settings-row__value" id="categoryValue"></span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+              </div>
             </div>
 
-            <p class="settings-group-label">外观（每个界面单独配置）</p>
-            <div class="settings-group" id="appearanceGroup">
-              <button class="settings-row is-button" id="rowAppearance" type="button">
-                <span class="settings-row__label">界面外观</span>
-                <span class="settings-row__value" id="appearanceValue">逐个界面调整</span>
-                <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
-              </button>
+            <div class="settings-section" data-section="appearance">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">外观</p>
+                  <p class="settings-section__desc">逐个界面配置主题色、玻璃质感与圆角</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--glass" id="appearanceGroup">
+                <button class="settings-row is-button" id="rowAppearance" type="button">
+                  <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
+                  <span class="settings-row__label">界面外观</span>
+                  <span class="settings-row__value" id="appearanceValue">逐个界面调整</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+              </div>
             </div>
 
-            <p class="settings-group-label">数据</p>
-            <div class="settings-group">
-              <button class="settings-row is-button" id="rowExport" type="button">
-                <span class="settings-row__label">数据导出</span>
-                <span class="settings-row__value">JSON / CSV</span>
-                <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
-              </button>
-              <button class="settings-row is-button settings-row--danger" id="rowClear" type="button">
-                <span class="settings-row__label">清空全部账单</span>
-              </button>
+            <div class="settings-section" data-section="data">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">数据</p>
+                  <p class="settings-section__desc">备份与清空：所有数据都只保存在本机</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--glass">
+                <button class="settings-row is-button" id="rowExport" type="button">
+                  <span class="settings-row__icon" data-icon="chevronRight" aria-hidden="true"></span>
+                  <span class="settings-row__label">数据导出</span>
+                  <span class="settings-row__value">JSON / CSV</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+                <button class="settings-row is-button settings-row--danger" id="rowClear" type="button">
+                  <span class="settings-row__icon" data-icon="trash" aria-hidden="true"></span>
+                  <span class="settings-row__label">清空全部账单</span>
+                </button>
+              </div>
             </div>
 
             <p class="app-version" id="appVersion">App v0.1.0</p>
@@ -222,8 +271,8 @@
             placeholder="说点什么，比如“昨天买鼠标花了120”"
             aria-label="记账输入"
           />
-          <button class="composer__action" id="composerAction" type="button" aria-label="语音输入">
-            <span data-icon="mic" aria-hidden="true"></span>
+          <button class="composer__action" id="composerAction" type="button" aria-label="添加一笔">
+            <span data-icon="plus" aria-hidden="true"></span>
           </button>
         </form>
 
@@ -237,17 +286,6 @@
             <span class="tabbar__label">设置</span>
           </button>
         </nav>
-      </div>
-
-      <!-- 长按语音波纹 -->
-      <div class="voice-wave" id="voiceWave" aria-hidden="true">
-        <div class="voice-wave__inner">
-          <div class="voice-wave__ripples">
-            <span></span><span></span><span></span>
-            <div class="voice-wave__mic"><span data-icon="mic" aria-hidden="true"></span></div>
-          </div>
-          <p class="t-caption" id="voiceHint">松手转文字</p>
-        </div>
       </div>
     </div>
 
@@ -282,7 +320,7 @@
 
     <!-- 通用模态弹窗 -->
     <div class="modal-root" id="modalRoot" role="dialog" aria-modal="true" hidden>
-      <div class="modal-root__panel" id="modalPanel"></div>
+      <div class="modal-root__panel soft-glass" id="modalPanel"></div>
     </div>
 
     <div class="toast-root" id="toastRoot" aria-live="polite"></div>

@@ -283,6 +283,15 @@ function declarationsFor(config) {
   const radius = RADIUS_TOKENS[config.radius] ?? RADIUS_TOKENS.soft;
   const density = DENSITY_TOKENS[config.density] ?? DENSITY_TOKENS.cozy;
 
+  // 主题色三段渐变：accent → 亮一档 → 暖色收尾，135° 与 .spend-overview 等强调块方向一致。
+  // 三段都用「达标的实色」推导（tone.surface / tone.surfaceDeep + 暖化混色），保证
+  // 即便用户选了极端色（如 #FB923C 暖橙），渐变内嵌的文字对比度依然过关。
+  const warmStop = mixHex(tone.surfaceDeep, "#FFE3A8", 0.55);
+  const accentGrad = `linear-gradient(135deg, ${tone.surface} 0%, ${tone.surfaceDeep} 48%, ${warmStop} 100%)`;
+  // 浅版渐变：把上面三个色按 .18 alpha 输出，用于 .dock::before / 设置分组色条等
+  // 需要「玻璃上淡淡的彩色光带」的地方。
+  const accentGradSoft = `linear-gradient(135deg, rgba(${r}, ${g}, ${b}, 0.22) 0%, rgba(${r}, ${g}, ${b}, 0.18) 48%, rgba(${tone.r}, ${tone.g}, ${tone.b}, 0.18) 100%)`;
+
   const lines = [
     `--app-accent: ${accent};`,
     `--app-accent-rgb: ${r} ${g} ${b};`,
@@ -293,6 +302,9 @@ function declarationsFor(config) {
     `--app-accent-strong: ${tone.surface};`,
     `--app-accent-btn: ${tone.surface};`,
     `--app-accent-btn-2: ${tone.surfaceDeep};`,
+    `--app-accent-warm: ${warmStop};`,
+    `--app-accent-grad: ${accentGrad};`,
+    `--app-accent-grad-soft: ${accentGradSoft};`,
     `--app-on-accent: ${tone.onAccent};`,
     `--app-accent-ink: ${tone.ink};`,
     `--glass-alpha: ${(alpha * 100).toFixed(0)}%;`,
@@ -314,7 +326,7 @@ const SCOPE_SELECTORS = {
   home: '#app .page[data-page="home"]',
   settings: '#app .page[data-page="settings"]',
   sheet: ".backdrop, .sheet, .modal-root",
-  composer: "#app .dock, #app .voice-wave",
+  composer: "#app .dock",
 };
 
 const STYLE_ID = "app-appearance-vars";
