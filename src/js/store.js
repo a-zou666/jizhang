@@ -1,6 +1,5 @@
 /** 应用状态：账单记录 + 设置（localStorage 持久化） */
 
-import { DEFAULT_APPEARANCE, sanitizeAppearance } from "./appearance.js";
 import { dateKey, normalizeDateKey, monthKey, parseAmount, round2, today, uid } from "./util.js";
 
 const STORAGE_KEY = "ai-ledger/v1";
@@ -42,8 +41,6 @@ const DEFAULT_STATE = () => ({
     budget: 5000,
     categories: [...DEFAULT_CATEGORIES],
   },
-  /** 每个视图独立的外观配置（首页 / 设置页 / 弹窗 / 输入条） */
-  appearance: DEFAULT_APPEARANCE(),
 });
 
 let state = DEFAULT_STATE();
@@ -140,7 +137,6 @@ export function load() {
       dropped = parsed.records.length - next.records.length;
     }
     next.settings = sanitizeSettings(parsed?.settings, next.settings);
-    next.appearance = sanitizeAppearance(parsed?.appearance);
     state = next;
     if (dropped > 0) reportStorage({ kind: "dropped", dropped });
     else if (storageProblem?.kind !== "write") reportStorage(null);
@@ -308,32 +304,6 @@ export function setSettings(patch) {
   commit("settings");
 }
 
-/* ---------------- 外观（每个视图独立配置） ---------------- */
-export const getAppearance = () => state.appearance;
-
-/** 只更新某个视图的外观，其他视图不受影响 */
-export function setViewAppearance(viewKey, patch) {
-  const current = state.appearance[viewKey];
-  if (!current) return;
-  state.appearance = {
-    ...state.appearance,
-    [viewKey]: sanitizeAppearance({ [viewKey]: { ...current, ...patch } })[viewKey],
-  };
-  commit("appearance");
-}
-
-export function resetViewAppearance(viewKey) {
-  const fresh = DEFAULT_APPEARANCE();
-  if (!fresh[viewKey]) return;
-  state.appearance = { ...state.appearance, [viewKey]: fresh[viewKey] };
-  commit("appearance");
-}
-
-export function resetAllAppearance() {
-  state.appearance = DEFAULT_APPEARANCE();
-  commit("appearance");
-}
-
 export function addCategory(name) {
   const clean = String(name ?? "").trim();
   if (!clean || state.settings.categories.includes(clean)) return false;
@@ -358,7 +328,6 @@ export function exportPayload() {
     version: "0.1.0",
     exportedAt: new Date().toISOString(),
     settings: { ...state.settings, apiKey: state.settings.apiKey ? "***" : "" },
-    appearance: JSON.parse(JSON.stringify(state.appearance)),
     records: [...state.records].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
   };
 }
@@ -368,7 +337,6 @@ export function replaceAll(next) {
   if (Array.isArray(next?.records)) fresh.records = next.records.map(sanitizeRecord).filter(Boolean);
   // 导入的 JSON 也要走同一套校验，别让脏数据从这条路绕过 load()
   fresh.settings = sanitizeSettings(next?.settings, fresh.settings);
-  if (next?.appearance) fresh.appearance = sanitizeAppearance(next.appearance);
   state = fresh;
   commit("all");
 }

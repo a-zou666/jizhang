@@ -1,11 +1,11 @@
 /** 八、底部停靠区 · 输入条：AI 文本解析记账 + 快捷分类 */
 
-import { hasBackend, parseAccounting } from "./bridge.js";
+import { hasBackend, parseIntent } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
 import { icon } from "./icons.js";
-import { addRecords, categoryColor, getSettings } from "./store.js";
+import { addRecords, categoryColor, getRecords, getSettings, removeRecord } from "./store.js";
 import { closeModal, haptic, openModal, toast } from "./ui.js";
-import { $, dateKey, el, escapeHtml, round2 } from "./util.js";
+import { $, dateKey, escapeHtml, round2, yuan } from "./util.js";
 import { view } from "./view.js";
 
 export function bindComposer({ onNeedSettings } = {}) {
@@ -33,7 +33,91 @@ export function bindComposer({ onNeedSettings } = {}) {
     if (!input.value.trim()) setSendMode(false);
   });
 
-  /* ---------------- 解析入账 ---------------- */
+  /* ---------------- 意图识别：新增 / 删除 / 查询 ---------------- */
+
+  /** 紧凑账目快照：每行 `序号|日期|物品|分类|金额`，最新在前，至多 100 行（省 token） */
+  function buildLedger() {
+    const records = [...getRecords()]
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt ?? 0) - (a.createdAt ?? 0)))
+      .slice(0, 100);
+    const lines = [];
+    const byLineId = new Map();
+    records.forEach((record, index) => {
+      const lineId = index + 1;
+      byLineId.set(lineId, record);
+      lines.push(
+        `${lineId}|${record.date.slice(5).replace("-", "/")}|${record.item}|${record.category}|${record.amount}`,
+      );
+    });
+    return { lines: lines.join("\n"), byLineId };
+  }
+
+  /** 账目行序号 → 真实记录 */
+  const resolveIds = (ids, byLineId) =>
+    [...new Set(ids)].map((id) => byLineId.get(id)).filter(Boolean);
+
+  /** 账目行 HTML（复用确认页的 .confirm-row 结构） */
+  const recordRowHtml = (record) => `
+    <div class="confirm-row">
+      <div class="confirm-row__main">
+        <span class="confirm-row__cat">
+          <span class="calendar-cell__dot" style="background:${escapeHtml(categoryColor(record.category))}"></span>
+          <span>${escapeHtml(record.category)}</span>
+        </span>
+        <span class="confirm-row__item">${escapeHtml(record.item)}</span>
+        <span class="confirm-row__amount t-numeric">${escapeHtml(yuan(record.amount))}</span>
+      </div>
+    </div>`;
+
+  /** 删除确认弹窗 */
+  function openDeleteConfirm(records) {
+    openModal(
+      `
+      <p class="modal-title">删除 ${records.length} 笔账目？</p>
+      <div class="intent-list">
+        ${records.map((record) => `${recordRowHtml(record)}<p class="intent-row-date t-caption">${escapeHtml(record.date)}</p>`).join("")}
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="delCancel" type="button">取消</button>
+        <button class="primary-btn primary-btn--compact" id="delConfirm" type="button">删除</button>
+      </div>`,
+      {
+        onMount: (panel) => {
+          panel.querySelector("#delCancel").addEventListener("click", closeModal);
+          panel.querySelector("#delConfirm").addEventListener("click", () => {
+            closeModal();
+            for (const record of records) removeRecord(record.id);
+            haptic(12);
+            toast(`已删除 ${records.length} 笔账目`, "ok");
+          });
+        },
+      },
+    );
+  }
+
+  /** 查询结果弹窗：明细 + 本地计算的合计 */
+  function openQueryResult(records, reply) {
+    const total = round2(records.reduce((sum, record) => sum + record.amount, 0));
+    const shown = records.slice(0, 30);
+    const more =
+      records.length > 30 ? `<p class="t-footnote">…还有 ${records.length - 30} 笔</p>` : "";
+    openModal(
+      `
+      <p class="modal-title">查询结果</p>
+      ${reply ? `<p class="t-footnote intent-reply">${escapeHtml(reply)}</p>` : ""}
+      <div class="intent-list">${shown.map(recordRowHtml).join("")}${more}</div>
+      <p class="query-total">共 ${records.length} 笔 · 合计 <b class="t-numeric">${escapeHtml(yuan(total))}</b></p>
+      <div class="modal-actions">
+        <button class="primary-btn primary-btn--compact" id="qDone" type="button">好的</button>
+      </div>`,
+      {
+        onMount: (panel) => {
+          panel.querySelector("#qDone").addEventListener("click", closeModal);
+        },
+      },
+    );
+  }
+
   async function submit(raw) {
     const text = String(raw ?? "").trim();
     if (!text || busy) return;
@@ -47,19 +131,41 @@ export function bindComposer({ onNeedSettings } = {}) {
     action.disabled = true;
     const loading = toast("AI 正在解析…");
     try {
-      const { records, skipped } = await parseAccounting(text, getSettings());
-      if (!records.length) {
-        toast(
-          skipped ? `识别到 ${skipped} 条，但都缺少金额或日期` : "没能识别出账单，换个说法试试",
-          "error",
-        );
-        return;
+      const { lines, byLineId } = buildLedger();
+      const { op, items, ids, reply } = await parseIntent(text, getSettings(), lines);
+
+      if (op === "add") {
+        if (!items.length) {
+          toast("没能识别出账单，换个说法试试", "error");
+          return;
+        }
+        input.value = "";
+        input.blur();
+        setSendMode(false);
+        openConfirm(items);
+      } else if (op === "del") {
+        const records = resolveIds(ids, byLineId);
+        if (!records.length) {
+          toast(reply || "没找到要删除的账目", "warning");
+          return;
+        }
+        input.value = "";
+        input.blur();
+        setSendMode(false);
+        openDeleteConfirm(records);
+      } else if (op === "query") {
+        const records = resolveIds(ids, byLineId);
+        if (!records.length) {
+          toast(reply || "没有匹配的账目", "warning");
+          return;
+        }
+        input.value = "";
+        input.blur();
+        setSendMode(false);
+        openQueryResult(records, reply);
+      } else {
+        toast(reply || "这句话和记账无关，试试「昨天买鼠标 120」", "info");
       }
-      if (skipped) toast(`另有 ${skipped} 条缺少金额或日期，已跳过`, "warning");
-      input.value = "";
-      input.blur();
-      setSendMode(false);
-      openConfirm(records);
     } catch (error) {
       console.error(error);
       toast(`解析失败：${error?.message ?? error}`, "error");

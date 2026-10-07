@@ -102,7 +102,8 @@ a {
   pointer-events: none;
 }
 
-/* 玻璃角部高光：右下叠一层非常淡的彩色光晕，配合顶部内高光营造立体感 */
+/* 玻璃角部高光：右下叠一层非常淡的彩色光晕，配合顶部内高光营造立体感。
+   （不用 mix-blend-mode —— 混合模式会强制离屏合成，是移动端掉帧大户） */
 .glass-sheen::after {
   content: "";
   position: absolute;
@@ -111,16 +112,15 @@ a {
   width: 60%;
   height: 60%;
   border-bottom-right-radius: inherit;
-  background: radial-gradient(120% 120% at 100% 100%, rgba(var(--app-accent-rgb), 0.12) 0%, rgba(var(--app-accent-rgb), 0) 70%);
-  mix-blend-mode: screen;
+  background: radial-gradient(120% 120% at 100% 100%, rgba(var(--app-accent-rgb), 0.14) 0%, rgba(var(--app-accent-rgb), 0) 70%);
   pointer-events: none;
 }
 
-/* 柔光玻璃高级材质：在标准玻璃基础上叠加三层渐变——
+/* 柔光玻璃高级材质：在玻璃表面叠加三层普通渐变——
    1. 左上斜射的柔白高光
    2. 右下角的淡彩折射（跟随主题色）
-   3. 一条极淡的横向噪点感条纹（仅极轻，避免脏感）
-   共同营造「玻璃后面有光」的氛围，但不会影响内部文本可读性。 */
+   3. 极轻的纵向提亮
+   （全部是 alpha 渐变、无混合模式：效果接近，GPU 成本低一个量级） */
 .soft-glass {
   position: relative;
   isolation: isolate;
@@ -132,10 +132,9 @@ a {
   inset: 0;
   border-radius: inherit;
   background:
-    radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0) 38%),
-    radial-gradient(120% 100% at 100% 100%, rgba(var(--app-accent-rgb), 0.16) 0%, rgba(var(--app-accent-rgb), 0) 55%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 100%);
-  mix-blend-mode: screen;
+    radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.30) 0%, rgba(255, 255, 255, 0) 38%),
+    radial-gradient(120% 100% at 100% 100%, rgba(var(--app-accent-rgb), 0.12) 0%, rgba(var(--app-accent-rgb), 0) 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -155,10 +154,15 @@ a {
   height: 100%;
   margin: 0 auto;
   overflow: hidden;
+  /* iOS 毛玻璃的底色：多层次彩色网格渐变（天蓝 / 青 / 淡粉 / 薰衣草），
+     玻璃面板在其上做 backdrop-blur 才能呈现出真实的「磨砂透色」效果 */
   background:
-    radial-gradient(120% 80% at 12% -10%, var(--app-accent-soft) 0%, transparent 55%),
-    radial-gradient(100% 60% at 100% 0%, rgba(var(--app-accent-rgb), 0.06) 0%, transparent 50%),
-    var(--bg-secondary);
+    radial-gradient(64% 48% at 8% -6%, rgba(0, 194, 255, 0.30) 0%, rgba(0, 194, 255, 0) 60%),
+    radial-gradient(56% 40% at 102% 4%, rgba(167, 139, 250, 0.26) 0%, rgba(167, 139, 250, 0) 62%),
+    radial-gradient(70% 52% at 50% 108%, rgba(255, 107, 157, 0.16) 0%, rgba(255, 107, 157, 0) 58%),
+    radial-gradient(48% 36% at 88% 78%, rgba(78, 205, 196, 0.18) 0%, rgba(78, 205, 196, 0) 60%),
+    radial-gradient(44% 32% at 14% 84%, rgba(255, 184, 77, 0.14) 0%, rgba(255, 184, 77, 0) 58%),
+    linear-gradient(180deg, #F3F7FC 0%, #EDF3F9 48%, #F6F9FD 100%);
 }
 
 /* ============ 页面系统 ============ */
@@ -179,7 +183,7 @@ a {
   -webkit-overflow-scrolling: touch;
   transform: translateX(100%);
   opacity: 0;
-  transition: transform var(--duration-medium) var(--ease-out),
+  transition: transform var(--duration-slow) var(--ease-ios),
               opacity var(--duration-medium) var(--ease-out);
   will-change: transform, opacity;
 }
@@ -314,9 +318,8 @@ a {
   inset: 0;
   border-radius: inherit;
   background:
-    radial-gradient(80% 60% at 0% 0%, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0) 45%),
-    radial-gradient(60% 60% at 100% 100%, rgba(var(--app-accent-rgb), 0.1) 0%, rgba(var(--app-accent-rgb), 0) 60%);
-  mix-blend-mode: screen;
+    radial-gradient(80% 60% at 0% 0%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 45%),
+    radial-gradient(60% 60% at 100% 100%, rgba(var(--app-accent-rgb), 0.10) 0%, rgba(var(--app-accent-rgb), 0) 60%);
   pointer-events: none;
   z-index: 0;
 }
@@ -1254,7 +1257,7 @@ a {
     var(--shadow-modal),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
   transform: translateY(100%);
-  transition: transform var(--duration-medium) var(--ease-out);
+  transition: transform var(--duration-slower) var(--ease-ios);
 }
 
 .sheet:not([hidden]) {
@@ -1468,9 +1471,11 @@ a {
   backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border-color);
-  box-shadow: var(--shadow-modal);
+  box-shadow:
+    var(--shadow-modal),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
   transform: scale(0.94);
-  transition: transform var(--duration-base) var(--ease-spring);
+  transition: transform var(--duration-medium) var(--ease-ios);
 }
 
 .modal-root:not([hidden]) .modal-root__panel {
@@ -1483,6 +1488,38 @@ a {
   font-weight: var(--font-bold);
   color: var(--text-primary);
   text-align: center;
+}
+
+/* ============ 意图弹窗（删除确认 / 查询结果） ============ */
+.intent-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.intent-reply {
+  margin: -4px 0 var(--space-3);
+}
+
+.intent-row-date {
+  margin: -2px 0 var(--space-1) var(--space-3);
+}
+
+.query-total {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-light);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.query-total b {
+  font-size: var(--text-lg);
+  color: var(--color-expense);
 }
 
 .modal-actions {
@@ -1814,6 +1851,19 @@ a {
 @media (min-width: 640px) {
   .calendar-grid {
     gap: 3px;
+  }
+}
+
+/* ============ 老 WebView 降级：不支持 backdrop-filter 时玻璃退化成不透明实色 ============
+   毛玻璃靠半透明底 + 背景模糊；模糊不可用时必须把底色顶满，
+   否则底下的文字会透上来、面板像一层雾而不是玻璃。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .panel,
+  .dock,
+  .sheet,
+  .modal-root__panel,
+  .settings-group--glass {
+    background: var(--surface-primary);
   }
 }
 

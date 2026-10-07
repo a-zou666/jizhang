@@ -1,6 +1,5 @@
 /** 应用入口：装配状态、视图与事件 */
 
-import { applyAppearance } from "./appearance.js";
 import { bindCalendarNav, bindCalendarSwipe } from "./calendar.js";
 import { bindComposer } from "./composer.js";
 import { bindConfirmSheet } from "./confirm.js";
@@ -8,7 +7,7 @@ import { closeOpenRows } from "./gesture.js";
 import { openMonthPicker, renderHome } from "./home.js";
 import { hydrateIcons, navIcon } from "./icons.js";
 import { bindSettings, renderSettings } from "./settings.js";
-import { getAppearance, load, onStorageError, subscribe } from "./store.js";
+import { load, onStorageError, subscribe } from "./store.js";
 import { toast } from "./ui.js";
 import { $, $$ } from "./util.js";
 import { goToday, shiftMonth, subscribeView, view } from "./view.js";
@@ -16,7 +15,6 @@ import { goToday, shiftMonth, subscribeView, view } from "./view.js";
 /* ---------------- 启动 ---------------- */
 load();
 onStorageError(reportStorageProblem);
-applyAppearance(getAppearance());
 hydrateIcons();
 bindConfirmSheet();
 bindSettings();
@@ -34,7 +32,6 @@ switchTab(view.tab, { force: true });
 function renderAll() {
   renderHome();
   renderSettings();
-  applyAppearance(getAppearance());
 }
 
 /* ---------------- 存储故障提示 ----------------

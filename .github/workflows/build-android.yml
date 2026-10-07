@@ -21,10 +21,19 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Read package version
+        id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -70,7 +79,7 @@ jobs:
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-build-${{ github.run_number }}
-          name: Android Build ${{ github.run_number }}
+          tag_name: android-v${{ steps.pkg.outputs.version }}-${{ github.run_number }}
+          name: Android v${{ steps.pkg.outputs.version }} (#${{ github.run_number }})
           generate_release_notes: true
           files: src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk

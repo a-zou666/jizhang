@@ -31,10 +31,19 @@ pub struct ModelsResult {
     pub models: Vec<String>,
 }
 
+/// 意图识别结果：add=记账 / del=删除 / query=查询 / none=无关闲聊
+#[derive(Serialize, Debug, Clone)]
+pub struct IntentResult {
+    pub op: String,
+    pub items: Vec<Expense>,
+    pub ids: Vec<usize>,
+    pub reply: String,
+}
+
 const DEFAULT_CLAUDE_URL: &str = "https://api.anthropic.com";
 const DEFAULT_OPENAI_URL: &str = "https://api.openai.com";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
-const MAX_TOKENS: u32 = 2048;
+const MAX_TOKENS: u32 = 768;
 
 /* ==========================================================================
    协议适配
@@ -342,6 +351,36 @@ fn extract_array(content: &str) -> Result<Vec<Value>, String> {
     ))
 }
 
+/// 从模型输出里抠出 JSON 对象（容忍 ```json 代码块与前后废话）
+fn extract_object(content: &str) -> Result<Value, String> {
+    let cleaned = content
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```JSON")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
+    if let Ok(object @ Value::Object(_)) = serde_json::from_str::<Value>(cleaned) {
+        return Ok(object);
+    }
+
+    let start = cleaned.find('{');
+    let end = cleaned.rfind('}');
+    if let (Some(start), Some(end)) = (start, end) {
+        if start < end {
+            if let Ok(object @ Value::Object(_)) = serde_json::from_str::<Value>(&cleaned[start..=end]) {
+                return Ok(object);
+            }
+        }
+    }
+
+    Err(format!(
+        "大模型返回的内容不是合法的 JSON 对象：{}",
+        truncate(cleaned, 300)
+    ))
+}
+
 /* ==========================================================================
    命令
    ========================================================================== */
@@ -423,6 +462,140 @@ async fn process_accounting(
     }
 
     Ok(records)
+}
+
+/// 意图识别 + 记账解析二合一：一次无状态调用完成「新增 / 删除 / 查询 / 闲聊」。
+/// 账目上下文由前端以紧凑行文本（`序号|日期|物品|分类|金额`）传入，
+/// 每次对话不携带历史消息 —— 输入=提示词+一句话+账目快照，输出=一个 JSON 对象。
+#[command]
+async fn process_intent(
+    text: String,
+    protocol: String,
+    base_url: String,
+    api_key: String,
+    api_model: String,
+    categories: Option<Vec<String>>,
+    ledger: Option<String>,
+) -> Result<IntentResult, String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("请先说点什么，比如「昨天买鼠标 120」".into());
+    }
+
+    let protocol = normalize_protocol(&protocol);
+    let categories: Vec<String> = categories
+        .unwrap_or_default()
+        .into_iter()
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect();
+    let today = today().format("%Y-%m-%d").to_string();
+
+    let category_hint = if categories.is_empty() {
+        "餐饮、交通、数码、日用、娱乐、其他".to_string()
+    } else {
+        categories.join("、")
+    };
+    let ledger_text = ledger
+        .unwrap_or_default()
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .take(100)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let ledger_block = if ledger_text.is_empty() {
+        "（暂无账目）".to_string()
+    } else {
+        ledger_text
+    };
+
+    let system_prompt = format!(
+        "你是记账助手，管理用户的支出账本。今天是 {today}。\n\
+         用户分类：{category_hint}\n\
+         账本（每行=序号|日期|物品|分类|金额，最新在前）：\n\
+         {ledger_block}\n\
+         根据用户这句话判断意图，只输出一个 JSON 对象，禁止任何解释、Markdown 或多余字符：\n\
+         - 记账/新增支出：{{\"op\":\"add\",\"items\":[{{\"date\":\"YYYY-MM-DD\",\"item\":\"物品\",\"category\":\"分类\",\"amount\":12.5}}]}}\n\
+         - 删除账目：{{\"op\":\"del\",\"ids\":[账本序号]}}\n\
+         - 查询/统计：{{\"op\":\"query\",\"ids\":[涉及行的序号],\"reply\":\"一句话答复，金额留给本地计算\"}}\n\
+         - 与记账无关的闲聊：{{\"op\":\"none\",\"reply\":\"一句话简短答复\"}}\n\
+         规则：相对日期（今天/昨天/前天/上周五等）换算为 YYYY-MM-DD，未提日期默认今天；\n\
+         amount 是数字不带符号；一句话含多笔支出输出多条；ids 只能取账本里已有的序号；\n\
+         category 只能从用户分类里选，拿不准用「其他」。"
+    );
+
+    let content = request_model(
+        protocol,
+        &base_url,
+        &api_key,
+        &api_model,
+        &system_prompt,
+        trimmed,
+    )
+    .await?;
+
+    let intent = extract_object(&content)?;
+    let op = intent
+        .get("op")
+        .and_then(|value| value.as_str())
+        .unwrap_or("none")
+        .trim()
+        .to_lowercase();
+    let reply = intent
+        .get("reply")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let ids: Vec<usize> = intent
+        .get("ids")
+        .and_then(|value| value.as_array())
+        .map(|list| {
+            list.iter()
+                .filter_map(|value| value.as_u64().map(|id| id as usize))
+                .filter(|id| *id >= 1)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut items = Vec::new();
+    if op == "add" {
+        if let Some(list) = intent.get("items").and_then(|value| value.as_array()) {
+            for item in list {
+                let amount = parse_amount(&item.get("amount").cloned().unwrap_or(Value::Null));
+                if amount <= 0.0 {
+                    continue;
+                }
+                let raw_date = first_string(item, &["date", "time", "day"]);
+                let raw_category = first_string(item, &["category", "categoryName", "type", "tag"]);
+                let raw_item = first_string(item, &["item", "name", "title", "desc", "description"]);
+                items.push(Expense {
+                    date: normalize_date(&raw_date, &today),
+                    item: normalize_item(&raw_item),
+                    category: normalize_category(&raw_category, &categories),
+                    amount: (amount * 100.0).round() / 100.0,
+                });
+            }
+        }
+    }
+
+    let op = match op.as_str() {
+        "add" if !items.is_empty() => "add".to_string(),
+        "add" => "none".to_string(),
+        "del" if !ids.is_empty() => "del".to_string(),
+        "del" => "none".to_string(),
+        "query" if !ids.is_empty() => "query".to_string(),
+        "query" => "none".to_string(),
+        _ => "none".to_string(),
+    };
+
+    Ok(IntentResult {
+        op,
+        items,
+        ids,
+        reply,
+    })
 }
 
 #[command]
@@ -564,6 +737,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             process_accounting,
+            process_intent,
             test_connection,
             list_models
         ])

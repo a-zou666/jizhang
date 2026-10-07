@@ -268,15 +268,13 @@ globalThis.__TAURI__ = undefined;
 
 /* ============ 加载应用模块 ============ */
 let store;
-let appearance;
 let iconModule;
 try {
   store = await import(new URL("../src/js/store.js", import.meta.url));
-  appearance = await import(new URL("../src/js/appearance.js", import.meta.url));
   iconModule = await import(new URL("../src/js/icons.js", import.meta.url));
-  ok("store.js / appearance.js / icons.js 可加载并解析");
+  ok("store.js / icons.js 可加载并解析");
 } catch (error) {
-  fail("store.js / appearance.js / icons.js 加载失败", error.message);
+  fail("store.js / icons.js 加载失败", error.message);
   console.log([...notes, ...failures].join("\n"));
   process.exit(1);
 }
@@ -287,52 +285,13 @@ const missingNodes = idsInHtml.filter((id) => !documentStub.getElementById(id));
 if (missingNodes.length) fail("index.html 中的 id 未挂载", missingNodes.join(", "));
 else ok(`index.html 的 ${idsInHtml.length} 个 id 均已解析`);
 
-/* --- 外观配置 --- */
-const cfg = appearance.DEFAULT_APPEARANCE();
-if (Object.keys(cfg).length !== 4) fail("默认外观应覆盖 4 个界面", Object.keys(cfg).join(","));
-else ok("默认外观覆盖 4 个界面：home / settings / sheet / composer");
-
-appearance.applyAppearance(cfg);
-const styleNode = documentStub.head.querySelector("#app-appearance-vars");
-const css = styleNode?.textContent ?? "";
-if (!css.includes("#app .page[data-page=\"home\"]")) fail("外观样式未生成首页作用域");
-else ok(`外观样式已注入（${css.length} 字符）`);
-if (!css.includes("--glass-blur")) fail("外观样式缺少玻璃变量");
-else ok("外观样式包含玻璃 / 圆角 / 密度变量");
-
-const accentCheck = appearance.sanitizeAppearance({
-  home: { accent: "#22C55E", glass: "strong", radius: "round", density: "roomy" },
-  settings: { accent: "not-a-color", glass: "nope" },
-});
-if (accentCheck.home.accent !== "#22C55E" || accentCheck.home.glass !== "strong") {
-  fail("sanitizeAppearance 未保留合法值", JSON.stringify(accentCheck.home));
-} else ok("sanitizeAppearance 保留合法值（#22C55E + strong）");
-
-const defaultAccent = appearance.DEFAULT_APPEARANCE().settings.accent;
-const defaultGlass = appearance.DEFAULT_APPEARANCE().settings.glass;
-if (accentCheck.settings.accent !== defaultAccent || accentCheck.settings.glass !== defaultGlass) {
-  fail("sanitizeAppearance 未回退非法值", JSON.stringify(accentCheck.settings));
-} else ok("sanitizeAppearance 回退非法值到默认");
-
-/* --- store 写入 / 读取（含每个界面独立） --- */
-store.load();
-store.setViewAppearance("home", { glass: "strong" });
-const afterHome = store.getAppearance();
-if (afterHome.home.glass !== "strong") fail("setViewAppearance 未生效");
-else ok("setViewAppearance 生效");
-if (afterHome.settings.glass !== cfg.settings.glass) fail("修改首页污染了设置页外观");
-else ok("修改首页不影响设置页（每个界面独立）");
-
-const persisted = storage.get("ai-ledger/v1");
-if (!persisted || !JSON.parse(persisted).appearance.home) fail("外观未持久化到 localStorage");
-else ok("外观已持久化到 localStorage");
+/* --- 外观引擎已移除：统一使用 tokens.css 静态设计令牌，不再逐界面配置（相关测试随之删除） --- */
 
 /* --- 语音输入已下线：composer.js 不应再触发任何录音/转写逻辑 --- */
 documentStub.body.append(makeNode("div", documentStub)); // toastRoot 兜底
 const composerSource = readFileSync(resolve(ROOT, "src/js/composer.js"), "utf8");
 const bridgeSource = readFileSync(resolve(ROOT, "src/js/bridge.js"), "utf8");
 const indexSource = readFileSync(resolve(ROOT, "src/index.html"), "utf8");
-const appearanceSource = readFileSync(resolve(ROOT, "src/js/appearance.js"), "utf8");
 
 if (/SpeechRecognition|webkitSpeechRecognition|MediaRecorder|navigator\.mediaDevices/.test(composerSource)) {
   fail("composer.js 仍残留语音引擎相关代码（已下线）");
@@ -346,9 +305,7 @@ if (/id="voiceWave"|class="voice-wave"/.test(indexSource)) {
   fail("index.html 仍保留 voice-wave 节点");
 } else ok("index.html 移除了 voice-wave 节点");
 
-if (/#app \.voice-wave/.test(appearanceSource)) {
-  fail("appearance.js 的 SCOPE_SELECTORS 仍包含 voice-wave");
-} else ok("appearance.js 的 SCOPE_SELECTORS 已不再依赖 voice-wave");
+/* appearance.js 已删除，voice-wave 残留检查随之移除 */
 
 /* --- 端到端：真实 app.js 启动流程（覆盖 home/calendar/detail/settings/composer 装配） --- */
 let appStarted = false;
@@ -460,7 +417,7 @@ const stripCssComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, " ");
 const cleanTokenCss = stripCssComments(tokenCss);
 const cleanAppCss = stripCssComments(appCss);
 const sourceCss = `${cleanTokenCss}\n${cleanAppCss}`;
-const scopedVars = new Set(); // 只由外观配置按视图提供的变量
+const scopedVars = new Set(); // 仅出现在非 :root 选择器内的变量（如组件作用域令牌），允许不全局定义
 for (const [, selector, body] of sourceCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
   const names = new Set(
     [...body.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1]),
@@ -610,9 +567,7 @@ if (deadClasses.length) {
 }
 
 /* --- 审计四：关键前景/背景配色的 WCAG 对比度 ---
-   起因：8 个主题色是用户自选的，亮暗跨度很大，按钮/墨色/角标都用它，
-   之前是「固定压暗 0.78」这种拍脑袋取值，#00C2FF 白字只有 2.07:1。
-   颜色一律从 tokens.css / appearance.js 的真实输出里读，改坏了就会红。 */
+   颜色一律从 tokens.css 的真实输出里读，改坏了就会红。 */
 const parseColor = (text) => {
   const value = String(text).trim();
   const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
@@ -747,70 +702,8 @@ for (const type of ["ok", "error", "warning"]) {
   requireContrast(`toast.is-${type} 文字`, fg, background ? overColor(background, WHITE_COLOR) : null, 4.5);
 }
 
-// 4) 八个主题色：按钮底色对 + 其上的文字色 + 浅底上的墨色
-const beforeAccentAudit = documentStub.head.querySelector("#app-appearance-vars");
-const baselineCss = beforeAccentAudit?.textContent ?? "";
-const accentValues = appearance.ACCENT_OPTIONS.map((option) => option.value);
-for (const accent of accentValues) {
-  appearance.applyAppearance({
-    home: { accent, glass: "medium", radius: "soft", density: "cozy" },
-    settings: { accent, glass: "medium", radius: "soft", density: "cozy" },
-    sheet: { accent, glass: "medium", radius: "round", density: "cozy" },
-    composer: { accent, glass: "strong", radius: "round", density: "cozy" },
-  });
-  const generated = documentStub.head.querySelector("#app-appearance-vars")?.textContent ?? "";
-  const homeBlock = generated.match(/#app \.page\[data-page="home"\]\s*\{([^}]*)\}/);
-  const declared = {};
-  for (const [, name, value] of (homeBlock?.[1] ?? "").matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
-    declared[name] = value.trim();
-  }
-  const accentColor = parseColor(declared["--app-accent"] ?? accent);
-  requireContrast(
-    `${accent} 按钮文字 × 实心底`,
-    parseColor(declared["--app-on-accent"] ?? ""),
-    parseColor(declared["--app-accent-btn"] ?? ""),
-    4.5,
-  );
-  requireContrast(
-    `${accent} 按钮文字 × 渐变第二站`,
-    parseColor(declared["--app-on-accent"] ?? ""),
-    parseColor(declared["--app-accent-btn-2"] ?? ""),
-    4.5,
-  );
-  requireContrast(
-    `${accent} 墨色 × 浅色主题底`,
-    parseColor(declared["--app-accent-ink"] ?? ""),
-    mixColor(accentColor, WHITE_COLOR, 0.86),
-    4.5,
-  );
-  requireContrast(
-    `${accent} 墨色 × 玻璃面板`,
-    parseColor(declared["--app-accent-ink"] ?? ""),
-    WHITE_COLOR,
-    4.5,
-  );
-  // 飞入角标：底色必须不透明，否则会被浅色背景拉亮、文字对比度守不住
-  const strongColor = parseColor(declared["--app-accent-strong"] ?? "");
-  if (!strongColor || strongColor.a < 1) {
-    contrastPairs.push({
-      label: `${accent} 飞入角标底色必须是不透明色`,
-      value: 0,
-      need: 4.5,
-      pass: false,
-    });
-  } else {
-    requireContrast(
-      `${accent} 飞入角标文字 × 实心角标底`,
-      parseColor(declared["--app-on-accent"] ?? ""),
-      strongColor,
-      4.5,
-    );
-  }
-}
-if (baselineCss) {
-  const styleNode = documentStub.head.querySelector("#app-appearance-vars");
-  if (styleNode) styleNode.textContent = baselineCss;
-}
+/* 外观引擎已移除：8 个可选主题色及其按钮/墨色对比度测试随之删除；
+   统一主题色 #00C2FF 的按钮/墨色对比度由下方 tokens 静态断言保障。 */
 
 const weakContrast = contrastPairs.filter((pair) => !pair.pass);
 if (weakContrast.length) {
@@ -824,38 +717,16 @@ if (weakContrast.length) {
   const bodyPairs = contrastPairs.filter((pair) => pair.need >= 4.5);
   ok(
     `对比度达标：${contrastPairs.length} 组前景/背景全部达到各自阈值` +
-      `（含 ${accentValues.length} 个主题色的按钮底色对与墨色、收入/支出与语义色、toast 四个底色）` +
+      `（含收入/支出与语义色、toast 四个底色）` +
       `，正文级最低 ${Math.min(...bodyPairs.map((pair) => pair.value)).toFixed(2)}:1`,
   );
 }
 
-/* --- 老 WebView 不支持 backdrop-filter 时，玻璃退化成不透明实色 --- */
-const savedCssGlobal = globalThis.CSS;
-globalThis.CSS = { supports: () => false };
-appearance.applyAppearance({
-  home: { accent: "#00C2FF", glass: "strong", radius: "soft", density: "cozy" },
-  settings: { accent: "#3B82F6", glass: "strong", radius: "soft", density: "cozy" },
-  sheet: { accent: "#00C2FF", glass: "strong", radius: "round", density: "cozy" },
-  composer: { accent: "#00C2FF", glass: "strong", radius: "round", density: "cozy" },
-});
-const solidCss = documentStub.head.querySelector("#app-appearance-vars")?.textContent ?? "";
-const solidAlpha = solidCss.match(/--glass-alpha:\s*([^;]+);/)?.[1]?.trim();
-const solidBlur = solidCss.match(/--glass-blur:\s*([^;]+);/)?.[1]?.trim();
-if (appearance.supportsGlassBlur() !== false) {
-  fail("CSS.supports 报不支持 backdrop-filter 时，supportsGlassBlur() 仍返回 true");
-} else if (solidAlpha !== "100%" || solidBlur !== "0px") {
-  fail("不支持 backdrop-filter 时玻璃没有退化成实色面板", `alpha=${solidAlpha} blur=${solidBlur}`);
-} else {
-  ok("不支持 backdrop-filter 时玻璃退化为不透明实色面板（alpha=100%、blur=0），避免半透明叠字看不清");
-}
-if (savedCssGlobal === undefined) delete globalThis.CSS;
-else globalThis.CSS = savedCssGlobal;
-appearance.applyAppearance(appearance.DEFAULT_APPEARANCE());
-const restoredAlpha = documentStub.head
-  .querySelector("#app-appearance-vars")
-  ?.textContent.match(/--glass-alpha:\s*([^;]+);/)?.[1]
-  ?.trim();
-if (restoredAlpha !== "86%") fail("恢复 CSS.supports 后玻璃没有回到默认通透度", String(restoredAlpha));
+/* --- 玻璃令牌：tokens.css 必须提供完整的玻璃变量（alpha / blur / saturate / hairline） --- */
+const glassVars = ["--glass-alpha", "--glass-alpha-strong", "--glass-blur", "--glass-blur-strong", "--glass-saturate", "--glass-hairline"];
+const missingGlass = glassVars.filter((name) => !definedVars.has(name));
+if (missingGlass.length) fail("tokens.css 缺少玻璃令牌", missingGlass.join(", "));
+else ok("玻璃令牌齐全（alpha / blur / saturate / hairline 均已在 tokens.css 定义）");
 
 /* --- 预览服务器：路径解析与 MIME（index.html 是 ES Module，必须有正确 MIME） --- */
 const preview = await import(new URL("./preview.mjs", import.meta.url));
@@ -954,6 +825,25 @@ if (!Array.isArray(fallback.records) || !fallback.records.length || typeof fallb
   ok(`兜底解析返回 { records, skipped }：${fallback.records.length} 条、skipped=${fallback.skipped}`);
 }
 
+// 意图识别：新增 / 删除 / 查询 一句话命中（无后端走 mockIntent 规则引擎）
+{
+  const sampleLedger = ["1|10/07|午餐|餐饮|25", "2|10/06|鼠标|数码|120", "3|10/06|咖啡|餐饮|18"].join("\n");
+  const delIntent = await bridge.parseIntent("把咖啡删除", store.getSettings(), sampleLedger);
+  if (delIntent.op !== "del" || delIntent.ids.join() !== "3") {
+    fail("意图识别：删除指令没有命中对应账目行", JSON.stringify(delIntent));
+  } else ok(`删除指令命中账目行 ${delIntent.ids.join("/")}`);
+
+  const queryIntent = await bridge.parseIntent("咖啡花了多少", store.getSettings(), sampleLedger);
+  if (queryIntent.op !== "query" || !queryIntent.ids.includes(3)) {
+    fail("意图识别：查询指令没有命中对应账目行", JSON.stringify(queryIntent));
+  } else ok(`查询指令命中 ${queryIntent.ids.length} 行（合计由本地计算）`);
+
+  const addIntent = await bridge.parseIntent("昨天买鼠标花了120元", store.getSettings(), sampleLedger);
+  if (addIntent.op !== "add" || !addIntent.items.length || addIntent.items[0].amount !== 120) {
+    fail("意图识别：记账指令没有解析出条目", JSON.stringify(addIntent));
+  } else ok(`记账指令解析出 ${addIntent.items.length} 条（mock 规则引擎）`);
+}
+
 // 假装 Rust 后端回来了 4 条脏数据：2 条能救回来（日期没补零 / 金额带符号），2 条救不回来
 const messyFromModel = [
   { date: "2026-10-4", item: "鼠标", category: "数码", amount: "120元" },
@@ -1014,7 +904,7 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
 }
 
 /* --- 存储故障不能静默：写入失败 / 本地数据损坏 / 坏记录被跳过都要能被 UI 看到 --- */
-store.replaceAll({ records: [], settings: {}, appearance: undefined });
+store.replaceAll({ records: [], settings: {} });
 const storageEvents = [];
 const unsubscribeStorage = store.onStorageError((problem) => storageEvents.push(problem));
 

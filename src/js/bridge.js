@@ -1,6 +1,6 @@
 /** 前后端桥接：Tauri invoke 封装 + 非 Tauri 环境兜底 */
 
-import { mockParse, mockTestConnection } from "./mock.js";
+import { mockIntent, mockParse, mockTestConnection } from "./mock.js";
 import { normalizeDateKey, parseAmount } from "./util.js";
 
 const tauriInvoke = () => {
@@ -52,6 +52,36 @@ export async function parseAccounting(text, settings) {
 }
 
 /**
+ * 意图识别 + 记账二合一：一次无状态调用支持「新增 / 删除 / 查询 / 闲聊」。
+ * ledger 为紧凑账目快照（每行 `序号|日期|物品|分类|金额`，最新在前，至多 100 行），
+ * 由调用方构造；ids 返回的是账目行序号（从 1 开始），调用方据此映射回真实记录。
+ * @returns {Promise<{op: "add"|"del"|"query"|"none", items: Array, ids: number[], reply: string}>}
+ */
+export async function parseIntent(text, settings, ledger) {
+  if (!hasBackend()) return mockIntent(text, ledger);
+
+  const result = await invoke("process_intent", {
+    text,
+    protocol: settings.protocol,
+    baseUrl: settings.baseUrl,
+    apiKey: settings.apiKey,
+    apiModel: settings.model,
+    categories: settings.categories,
+    ledger,
+  });
+
+  const items = (Array.isArray(result?.items) ? result.items : [])
+    .map(normalizeRaw)
+    .filter((record) => record.amount > 0 && record.date);
+  return {
+    op: String(result?.op ?? "none"),
+    items,
+    ids: Array.isArray(result?.ids) ? result.ids.map((id) => Number(id)).filter(Number.isFinite) : [],
+    reply: String(result?.reply ?? ""),
+  };
+}
+
+/**
  * 测试 API 连通性
  * @returns {Promise<{ok: boolean, message: string, model?: string}>}
  */
@@ -71,9 +101,38 @@ export async function testConnection(settings) {
 }
 
 /**
- * 从兼容协议 `/v1/models` 拉取可用模型列表
- * @returns {Promise<{ok: boolean, message: string, models: string[]}>}
+ * 从兼容协议 `/v1/models` 拉取可用模型列表。
+ *
+ * 健壮性：超时（15s）+ 至多 1 次重试；全部失败时用「上次成功拉取的真实模型」兜底，
+ * 但绝不返回任何假模型/示例列表。无后端环境直接 ok:false 且不提供任何模型。
+ * @returns {Promise<{ok: boolean, message: string, models: string[], cached?: boolean}>}
  */
+const MODEL_CACHE_KEY = "ai-ledger/models-cache";
+
+function loadModelCache() {
+  try {
+    const raw = localStorage.getItem(MODEL_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveModelCache(cache) {
+  try {
+    localStorage.setItem(MODEL_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* 隐私模式 / 配额满：缓存失败不影响主流程 */
+  }
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("请求超时")), ms)),
+  ]);
+}
+
 export async function listModels(settings) {
   if (!hasBackend()) {
     return {
@@ -82,20 +141,41 @@ export async function listModels(settings) {
       models: [],
     };
   }
-  try {
-    const result = await invoke("list_models", {
-      protocol: settings.protocol,
-      baseUrl: settings.baseUrl,
-      apiKey: settings.apiKey,
-    });
-    return {
-      ok: Boolean(result?.ok),
-      message: String(result?.message ?? ""),
-      models: Array.isArray(result?.models) ? result.models.map((m) => String(m)) : [],
-    };
-  } catch (error) {
-    return { ok: false, message: String(error?.message ?? error), models: [] };
+  const cache = loadModelCache();
+  const key = `${settings.protocol}@${settings.baseUrl}`;
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await withTimeout(
+        invoke("list_models", {
+          protocol: settings.protocol,
+          baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
+        }),
+        15000,
+      );
+      const models = Array.isArray(result?.models) ? result.models.map((m) => String(m)) : [];
+      cache[key] = models;
+      saveModelCache(cache);
+      return {
+        ok: Boolean(result?.ok),
+        message: String(result?.message ?? ""),
+        models,
+      };
+    } catch (error) {
+      lastError = error;
+    }
   }
+  // 全部失败：回退到上次成功拉取的真实列表（不造任何假模型）
+  if (cache[key]?.length) {
+    return {
+      ok: true,
+      cached: true,
+      message: "使用上次成功拉取的模型列表（本次请求失败）",
+      models: cache[key],
+    };
+  }
+  return { ok: false, message: String(lastError?.message ?? lastError), models: [] };
 }
 
 

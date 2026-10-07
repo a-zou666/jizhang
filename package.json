@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
+    "dev": "vite",
+    "build": "vite build",
     "preview": "node scripts/preview.mjs",
-    "check": "node --check src/js/app.js && node --check src/js/appearance.js && node --check src/js/settings.js && node --check src/js/store.js && node --check src/js/composer.js && node --check scripts/preview.mjs && node --check scripts/inject-android-permissions.mjs && node scripts/inject-android-permissions.mjs --self-test && node scripts/smoke.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "check": "node --check src/js/app.js && node --check src/js/bridge.js && node --check src/js/calendar.js && node --check src/js/composer.js && node --check src/js/confirm.js && node --check src/js/detail.js && node --check src/js/editor.js && node --check src/js/gesture.js && node --check src/js/home.js && node --check src/js/icons.js && node --check src/js/mock.js && node --check src/js/settings.js && node --check src/js/store.js && node --check src/js/ui.js && node --check src/js/util.js && node --check src/js/view.js && node --check scripts/preview.mjs && node --check scripts/inject-android-permissions.mjs && node scripts/inject-android-permissions.mjs --self-test && node scripts/smoke.mjs && node --test",
+    "smoke": "node scripts/smoke.mjs",
+    "test": "node --test"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "vite": "^8.3.3"
   }
 }

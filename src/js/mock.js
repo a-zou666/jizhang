@@ -119,6 +119,55 @@ export function mockParse(text, fallbackDate = today()) {
     .filter(Boolean);
 }
 
+/**
+ * 本地兜底的意图识别（与 Rust 端 process_intent 对齐，供浏览器预览演示）：
+ * 删除 / 查询 / 记账 三类指令规则匹配，其余按闲聊处理。
+ * @param {string} text 用户输入
+ * @param {string} ledger 紧凑账目快照（每行 `序号|日期|物品|分类|金额`）
+ */
+export function mockIntent(text, ledger = "") {
+  const lines = String(ledger)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, date, item, category, amount] = line.split("|");
+      return { id: Number(id), date, item, category, amount: Number(amount) };
+    });
+
+  const ask = String(text).trim();
+
+  // 删除：删除/删掉/去掉 + 物品关键词
+  if (/删|去掉|移除|不要了/.test(ask)) {
+    const keyword = ask.replace(/删|删除|删掉|除去|去掉|移除|不要了|掉|除|了|把|那|笔|条|的|号/g, "").trim();
+    const hits = keyword
+      ? lines.filter((line) => line.item.includes(keyword) || line.category.includes(keyword))
+      : [];
+    if (hits.length) return { op: "del", items: [], ids: hits.map((line) => line.id), reply: "" };
+    return { op: "none", items: [], ids: [], reply: "没找到要删除的账目" };
+  }
+
+  // 查询：问金额 / 合计 / 统计（且本身不是记账句式）
+  if (/多少|总共|合计|一共|统计|花了多|支出多少|查/.test(ask) && !/\d\s*(块|元|¥|￥)/.test(ask)) {
+    const keyword = ask.replace(/多少|总共|合计|一共|统计|支出|花了|花|我|这个|月|的|了|查|近|最|新|天/g, "").trim();
+    const hits = keyword
+      ? lines.filter((line) => line.item.includes(keyword) || line.category.includes(keyword))
+      : lines;
+    if (hits.length) {
+      return {
+        op: "query",
+        items: [],
+        ids: hits.map((line) => line.id),
+        reply: `找到 ${hits.length} 笔相关账目`,
+      };
+    }
+    return { op: "none", items: [], ids: [], reply: "没有匹配的账目" };
+  }
+
+  // 其余：按记账解析（沿用 mockParse 的规则解析）
+  return { op: "add", items: mockParse(ask), ids: [], reply: "" };
+}
+
 export async function mockTestConnection(settings) {
   await new Promise((resolve) => setTimeout(resolve, 600));
   if (!settings.baseUrl) {
