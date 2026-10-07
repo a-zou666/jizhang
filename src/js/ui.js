@@ -7,14 +7,23 @@ import { $, el, escapeHtml } from "./util.js";
 const REDUCED = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const SHEET_MS = REDUCED ? 0 : 250;
 
+let hideTimer = null;
+
 export function openLayer(node) {
+  // 上一次关闭还没落地就又打开（弹窗之间连续跳转）时，取消那个隐藏动作
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
   node.hidden = false;
   requestAnimationFrame(() => node.classList.add("is-open"));
 }
 
 export function closeLayer(node) {
   node.classList.remove("is-open");
-  window.setTimeout(() => {
+  if (hideTimer) clearTimeout(hideTimer);
+  hideTimer = window.setTimeout(() => {
+    hideTimer = null;
     node.hidden = true;
   }, SHEET_MS + 20);
 }

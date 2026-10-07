@@ -903,47 +903,143 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   ok("导入 JSON 的设置项与读本地共用一套收口：非法协议回退、weekStart/budget 归一、分类去重去空、URL 去空格");
 }
 
-/* --- 服务商档案：每个地址单独保存 Key / 模型，切换自动恢复 --- */
+/* --- 模型管理：服务商 + 模型都由用户显式增删改，不做任何自动保存 / 恢复 --- */
 {
-  const key = "openai-compatible@https://api.minimax.chat/v1";
-  store.setSettings({
+  store.replaceAll({ records: [], settings: {} });
+
+  const deepseek = store.addProvider({
+    name: "DeepSeek",
+    protocol: "openai-compatible",
+    baseUrl: "https://api.deepseek.com",
+    apiKey: "sk-deepseek",
+  });
+  const minimax = store.addProvider({
+    name: "Minimax",
     protocol: "openai-compatible",
     baseUrl: "https://api.minimax.chat/v1",
     apiKey: "sk-minimax",
-    model: "MiniMax-Text-01",
-    profiles: {
-      [key]: { apiKey: "sk-minimax", model: "MiniMax-Text-01", models: ["MiniMax-Text-01", "abab6.5s-chat"] },
-      "openai-compatible@https://api.deepseek.com": {
-        apiKey: "sk-deepseek",
-        model: "deepseek-chat",
-        models: ["deepseek-chat", "deepseek-reasoner"],
-      },
+    models: ["MiniMax-Text-01", { id: "abab6.5s-chat", alias: "海螺" }, 123, "  "],
+  });
+  if (!deepseek || !minimax || store.getProviders().length !== 2 || minimax.models.length !== 2) {
+    fail("服务商没有保存下来", JSON.stringify(store.getProviders()));
+  } else ok(`服务商已保存：DeepSeek / Minimax(${minimax.models.length} 个模型，非法模型项被丢弃)`);
+
+  // 新建服务商不能偷偷改当前连接
+  const idle = store.getSettings();
+  if (idle.activeProviderId || idle.baseUrl || idle.apiKey) {
+    fail("新建服务商自动改了当前连接", JSON.stringify({ activeProviderId: idle.activeProviderId, baseUrl: idle.baseUrl }));
+  } else ok("新建服务商不会自动改当前连接：只有用户点「启用」才写入");
+
+  // 启用 = 唯一的切换入口
+  store.activateProvider(minimax.id);
+  const after = store.getSettings();
+  if (
+    after.activeProviderId !== minimax.id ||
+    after.baseUrl !== minimax.baseUrl ||
+    after.apiKey !== minimax.apiKey ||
+    after.model !== "MiniMax-Text-01"
+  ) {
+    fail("启用服务商后当前连接没跟上", JSON.stringify({ ...after, providers: undefined }));
+  } else ok("点「启用」把该服务商的地址 / Key / 默认模型写进当前连接");
+
+  // 手动加模型：幂等 + 去重 + 丢弃非法
+  store.addProviderModels(deepseek.id, ["deepseek-chat"]);
+  const dup = store.addProviderModels(deepseek.id, ["deepseek-chat", "deepseek-reasoner", 123, ""]);
+  if (dup !== 1 || store.getProvider(deepseek.id).models.length !== 2) {
+    fail("手动添加模型没有去重 / 过滤", JSON.stringify(store.getProvider(deepseek.id)));
+  } else ok("手动添加模型：已存在的跳过、非法项丢弃");
+
+  // 改当前连接只同步到已启用的那一家
+  store.patchConnection({ apiKey: "sk-minimax-2" });
+  if (
+    store.getProvider(minimax.id).apiKey !== "sk-minimax-2" ||
+    store.getProvider(deepseek.id).apiKey !== "sk-deepseek"
+  ) {
+    fail("改当前连接时同步范围不对", JSON.stringify(store.getProviders().map((p) => [p.name, p.apiKey])));
+  } else ok("改当前连接只同步到「已启用的那一家」，其他服务商不受影响");
+
+  // 设默认 / 删除模型
+  store.setProviderModel(deepseek.id, "deepseek-reasoner");
+  if (store.getProvider(deepseek.id).model !== "deepseek-reasoner") {
+    fail("设置默认模型失败", JSON.stringify(store.getProvider(deepseek.id)));
+  } else ok("模型可设为该服务商的默认模型");
+  store.removeProviderModel(deepseek.id, "deepseek-reasoner");
+  if (store.getProvider(deepseek.id).models.some((m) => m.id === "deepseek-reasoner")) {
+    fail("删除模型失败", JSON.stringify(store.getProvider(deepseek.id)));
+  } else ok("模型可从列表里删除");
+
+  // 非法服务商被清洗 + 失效的启用 id 复位
+  store.replaceAll({
+    records: [],
+    settings: {
+      providers: [null, { name: "缺字段" }, { name: "协议坏", protocol: "不存在的协议", models: [1, "ok"] }],
+      activeProviderId: "不存在的 id",
     },
   });
-  const profiles = store.getSettings().profiles ?? {};
-  const savedMini = profiles[key];
-  const savedDeep = profiles["openai-compatible@https://api.deepseek.com"];
-  if (savedMini?.apiKey !== "sk-minimax" || savedDeep?.model !== "deepseek-chat") {
-    fail("服务商档案没有被持久化", JSON.stringify(profiles));
-  } else ok(`服务商档案已保存：Minimax(${savedMini.models.length} 个模型) / DeepSeek(${savedDeep.models.length} 个模型)`);
-
-  // 非法档案必须被清洗掉（不能把脏数据写进运行态）
-  store.setSettings({
-    profiles: { bad: 123, "also-bad": { apiKey: 1 }, [key]: { apiKey: "sk-x", model: "m", models: [1, "ok"] } },
-  });
-  const cleaned = store.getSettings().profiles ?? {};
-  if (cleaned.bad || cleaned["also-bad"] || cleaned[key]?.models?.includes(1)) {
-    fail("非法服务商档案没有过滤", JSON.stringify(cleaned));
-  } else ok("非法服务商档案被过滤（非对象 / 无 @ 分隔 / 非字符串模型）");
+  const cleaned = store.getProviders();
+  if (
+    cleaned.length !== 2 ||
+    cleaned[1].protocol !== "openai-compatible" ||
+    cleaned[1].models.length !== 1 ||
+    store.getSettings().activeProviderId
+  ) {
+    fail("非法服务商数据没有过滤", JSON.stringify(cleaned));
+  } else ok("非法服务商被过滤（空对象丢弃 / 非法协议回退 / 非法模型丢弃 / 失效的启用 id 复位）");
 
   // 导出不能泄露 Key
+  store.replaceAll({ records: [], settings: {} });
+  store.addProvider({ name: "导出测试", baseUrl: "https://x.test", apiKey: "sk-secret" });
   const payload = store.exportPayload();
-  const leaked = Object.values(payload.settings.profiles ?? {}).some((p) => p.apiKey && p.apiKey !== "***");
-  if (leaked || payload.settings.apiKey === "sk-minimax") {
-    fail("导出的 JSON 泄露了 API Key", JSON.stringify(payload.settings).slice(0, 120));
-  } else ok("导出数据里的 API Key 已脱敏（含服务商档案）");
+  const leaked = payload.settings.providers.some((p) => p.apiKey && p.apiKey !== "***");
+  if (leaked) {
+    fail("导出的 JSON 泄露了服务商的 API Key", JSON.stringify(payload.settings.providers));
+  } else ok("导出数据里每个服务商的 API Key 都脱敏了");
 
-  store.setSettings({ profiles: {} });
+  store.replaceAll({ records: [], settings: {} });
+}
+
+/* --- 模型管理弹窗：在 DOM 桩里真实渲染一遍 --- */
+{
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const models = await import(new URL("../src/js/models.js", import.meta.url));
+  const panel = documentStub.getElementById("modalPanel");
+  store.replaceAll({ records: [], settings: {} });
+
+  models.openModelManager();
+  await settle();
+  if (!panel.querySelector(".mm-empty")) {
+    fail("模型管理空态没渲染出来", String(panel.textContent).slice(0, 160));
+  } else ok("模型管理能打开：还没有服务商时给出「添加服务商」引导");
+
+  const provider = store.addProvider({ name: "桩服务商", baseUrl: "https://stub.test", apiKey: "sk-stub" });
+  store.addProviderModels(provider.id, ["stub-a", "stub-b"]);
+  models.openModelManager();
+  await settle();
+  const row = panel.querySelector(".mm-row");
+  const rowText = String(row?.textContent ?? "");
+  if (!rowText.includes("桩服务商") || !rowText.includes("2 个模型")) {
+    fail("服务商行信息不全", rowText.slice(0, 200));
+  } else ok("服务商行渲染正常：名称 / 地址 / 模型数");
+
+  // 点服务商行 = 启用，把它的配置写进当前连接
+  row.querySelector(".mm-row__main").__listeners.get("click")[0]();
+  await settle();
+  if (store.getSettings().baseUrl !== "https://stub.test" || !store.getSettings().model) {
+    fail("点启用后当前连接没切换", JSON.stringify({ ...store.getSettings(), providers: undefined }));
+  } else ok("点服务商行即可启用：地址 / Key / 默认模型写入当前连接");
+
+  // 右侧第一个按钮 = 管理它的模型
+  models.openModelManager();
+  await settle();
+  const actions = panel.querySelector(".mm-row").querySelectorAll(".mm-row__action");
+  actions[0].__listeners.get("click")[0]();
+  await settle();
+  const modelRows = panel.querySelectorAll(".mm-row");
+  if (modelRows.length !== 2 || !String(panel.textContent ?? "").includes("stub-a")) {
+    fail("模型列表没渲染出来", `rows=${modelRows.length}`);
+  } else ok(`模型列表渲染正常：${modelRows.length} 个模型（点行设默认、右侧删除）`);
+
+  store.replaceAll({ records: [], settings: {} });
 }
 
 /* --- AI 解析必须有超时上限，避免界面一直无反馈 --- */

@@ -2,6 +2,7 @@
 
 import { listModels, testConnection } from "./bridge.js";
 import { hydrateIcons } from "./icons.js";
+import { currentModelIds, currentProviderName, fetchModelsInto, openModelManager } from "./models.js";
 import {
   PROTOCOL_ORDER,
   PROTOCOL_PRESETS,
@@ -9,55 +10,30 @@ import {
   categoryColor,
   clearRecords,
   exportPayload,
+  getActiveProvider,
+  getProviders,
   getRecords,
   getSettings,
+  patchConnection,
   removeCategory,
   setSettings,
 } from "./store.js";
 import { closeModal, confirmDialog, openModal, pickOption, promptText, toast } from "./ui.js";
 import { $, dateKey, el, round2, yuan } from "./util.js";
 
+/** 没启用服务商时，拉取到的模型暂时放这里 */
 const fetchedModels = new Map();
 
-/** 服务商档案的键：协议 + 归一化后的地址 */
-function profileKeyOf(settings) {
-  const url = String(settings.baseUrl ?? "").trim().replace(/\/+$/, "");
-  return `${settings.protocol ?? "openai-compatible"}@${url}`;
-}
-
-/** 把当前这组 Key / 模型 / 已拉取的模型写进该服务商的档案 */
-function saveProfile(patch = {}) {
-  const current = { ...getSettings(), ...patch };
-  const key = profileKeyOf(current);
-  if (!key.replace(/^[^@]*@/, "")) return; // 没有 Base URL 就先不建档
-  const profiles = { ...(current.profiles ?? {}) };
-  profiles[key] = {
-    apiKey: current.apiKey ?? "",
-    model: current.model ?? "",
-    models: fetchedModels.get(current.baseUrl) ?? profiles[key]?.models ?? [],
-  };
-  setSettings({ profiles });
-}
-
-/** 切到某个服务商时，自动恢复它上次保存的 Key 与模型 */
-function restoreProfile() {
-  const current = getSettings();
-  const profile = (current.profiles ?? {})[profileKeyOf(current)];
-  if (!profile) return false;
-  const patch = {};
-  if (profile.apiKey && profile.apiKey !== current.apiKey) patch.apiKey = profile.apiKey;
-  if (profile.model && profile.model !== current.model) patch.model = profile.model;
-  if (profile.models?.length) fetchedModels.set(current.baseUrl, profile.models);
-  if (Object.keys(patch).length) setSettings(patch);
-  return Boolean(Object.keys(patch).length || profile.models?.length);
-}
-
+/** 模型下拉：来自「模型管理」里该服务商的模型清单；没启用服务商时用临时拉取结果 */
 function syncModelOptions(selectedModel = "") {
   const select = $("#modelName");
-  const models = [...(fetchedModels.get(getSettings().baseUrl) ?? [])];
+  const fromProvider = currentModelIds();
+  const models = fromProvider.length
+    ? [...fromProvider]
+    : [...(fetchedModels.get(getSettings().baseUrl) ?? [])];
   if (selectedModel && !models.includes(selectedModel)) models.unshift(selectedModel);
   select.replaceChildren(
-    el("option", { value: "", text: models.length ? "请选择模型" : "先拉取可用模型" }),
+    el("option", { value: "", text: models.length ? "请选择模型" : "去模型管理添加" }),
     ...models.map((id) => el("option", { value: id, text: id })),
   );
   select.disabled = models.length === 0;
@@ -67,16 +43,19 @@ function syncModelOptions(selectedModel = "") {
 /* ---------------- 渲染 ---------------- */
 export function renderSettings() {
   const settings = getSettings();
-  // 重进设置页时，用该服务商档案里保存的模型清单填下拉框（省掉一次重新拉取）
-  const profile = (settings.profiles ?? {})[profileKeyOf(settings)];
-  if (profile?.models?.length && !fetchedModels.has(settings.baseUrl)) {
-    fetchedModels.set(settings.baseUrl, profile.models);
-  }
+  const providers = getProviders();
+  const active = getActiveProvider();
 
   $("#protocolValue").textContent = PROTOCOL_PRESETS[settings.protocol].label;
   syncInput($("#baseUrl"), settings.baseUrl);
   syncInput($("#apiKey"), settings.apiKey);
   syncModelOptions(settings.model);
+
+  $("#modelManagerValue").textContent = providers.length
+    ? active
+      ? `当前：${active.name}`
+      : `${providers.length} 个服务商`
+    : "未添加";
 
   $("#weekStartValue").textContent = settings.weekStart === 0 ? "周日" : "周一";
   $("#budgetValue").textContent = yuan(settings.budget);
@@ -107,30 +86,28 @@ export function bindSettings() {
         const patch = { protocol: value };
         const presetUrls = Object.values(PROTOCOL_PRESETS).map((item) => item.baseUrl);
         if (!current.baseUrl || presetUrls.includes(current.baseUrl)) patch.baseUrl = preset.baseUrl;
-        setSettings(patch);
-        // 换协议等于换服务商：自动把这家上次保存的 Key / 模型带回来
-        const restored = restoreProfile();
+        patchConnection(patch);
         renderSettings();
-        toast(restored ? `已切换为${preset.label}（已恢复该服务商的 Key 与模型）` : `已切换为${preset.label}`, "ok");
+        toast(`已切换为${preset.label}`, "ok");
       },
     });
   });
 
-  /* API 参数 */
+  /* 模型管理 */
+  $("#rowModels").addEventListener("click", () => {
+    openModelManager(() => renderSettings());
+  });
+
+  /* API 参数：改的是「当前连接」，若已启用服务商会同步到那一家 */
   $("#baseUrl").addEventListener("change", (event) => {
-    setSettings({ baseUrl: event.target.value.trim() });
-    // Base URL 就是服务商身份：换了它就把该服务商的存档配置恢复出来
-    const restored = restoreProfile();
+    patchConnection({ baseUrl: event.target.value.trim() });
     renderSettings();
-    if (restored) toast("已恢复该服务商保存的 Key 与模型", "ok");
   });
   $("#modelName").addEventListener("change", (event) => {
-    setSettings({ model: event.target.value });
-    saveProfile({ model: event.target.value });
+    patchConnection({ model: event.target.value });
   });
   $("#apiKey").addEventListener("change", (event) => {
-    setSettings({ apiKey: event.target.value.trim() });
-    saveProfile({ apiKey: event.target.value.trim() });
+    patchConnection({ apiKey: event.target.value.trim() });
   });
 
   $("#toggleKey").addEventListener("click", () => {
@@ -144,11 +121,18 @@ export function bindSettings() {
   hydrateIcons($("#fetchModels"));
   $("#fetchModels").addEventListener("click", fetchModels);
 
-  /* ---------------- 拉取模型 ---------------- */
+  /* ---------------- 刷新模型 ---------------- */
   async function fetchModels() {
     const current = getSettings();
+    const active = getActiveProvider();
     if (!current.apiKey) return toast("请先填写 API Key", "error");
     if (!current.baseUrl) return toast("请先填写 Base URL", "error");
+
+    // 已启用服务商：拉取后由用户勾选加入它的模型清单（模型管理里也能进）
+    if (active) {
+      await fetchModelsInto(active.id, () => renderSettings());
+      return;
+    }
 
     const btn = $("#fetchModels");
     btn.disabled = true;
@@ -169,9 +153,7 @@ export function bindSettings() {
       fetchedModels.set(current.baseUrl, models);
       const selected = models.includes(current.model) ? current.model : models[0];
       syncModelOptions(selected);
-      setSettings({ model: selected });
-      // 把这家服务商的模型清单一起存进档案，下次切回来不用重新拉取
-      saveProfile({ model: selected });
+      patchConnection({ model: selected });
       toast(`已加载 ${models.length} 个模型`, "ok");
     } finally {
       btn.disabled = false;

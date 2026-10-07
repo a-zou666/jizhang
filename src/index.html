@@ -108,9 +108,16 @@
                 <span class="settings-section__bar" aria-hidden="true"></span>
                 <div class="settings-section__title">
                   <p class="settings-group-label">连接</p>
-                  <p class="settings-section__desc">每个服务商的地址、Key 与模型会分别保存，换 Base URL 自动恢复</p>                </div>
+                  <p class="settings-section__desc">服务商与模型在「模型管理」里维护，这里只管当前连接</p>                </div>
               </header>
               <div class="settings-group settings-group--accent settings-group--glass soft-glass">
+                <button class="settings-row is-button" id="rowModels" type="button" aria-haspopup="dialog">
+                  <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
+                  <span class="settings-row__label">模型管理</span>
+                  <span class="settings-row__value" id="modelManagerValue">未添加</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+
                 <button
                   class="settings-row is-button"
                   id="rowProtocol"

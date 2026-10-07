@@ -40,8 +40,10 @@ const DEFAULT_STATE = () => ({
     weekStart: 1,
     budget: 5000,
     categories: [...DEFAULT_CATEGORIES],
-    // 服务商档案：{ "协议@BaseURL": { apiKey, model, models[] } }
-    profiles: {},
+    // 模型管理：服务商列表 + 当前启用的服务商 id
+    // providers: [{ id, name, protocol, baseUrl, apiKey, model, models: [{ id, alias }] }]
+    providers: [],
+    activeProviderId: "",
   },
 });
 
@@ -120,32 +122,52 @@ function sanitizeSettings(raw, base) {
     weekStart: Number(raw.weekStart) === 0 ? 0 : 1,
     budget: Number.isFinite(budget) ? Math.max(0, round2(budget)) : base.budget,
     categories: categories.length ? categories : [...base.categories],
-    profiles: sanitizeProfiles(raw.profiles),
+    providers: sanitizeProviders(raw.providers),
+    // 指向了不存在的服务商就当成「没有启用任何服务商」
+    activeProviderId: sanitizeProviders(raw.providers).some((item) => item.id === String(raw.activeProviderId ?? "").trim())
+      ? String(raw.activeProviderId).trim()
+      : "",
   };
 }
 
-/**
- * 每个 AI 服务商（协议 + Base URL）单独保存一份配置：API Key、上次选的模型、
- * 以及从该服务商拉取到的真实模型列表。这样在 Minimax / DeepSeek / OpenAI 之间
- * 来回切换时，不用重填 Key，也不用重新拉模型。
- */
-function sanitizeProfiles(raw) {
-  if (!raw || typeof raw !== "object") return {};
-  const out = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (typeof key !== "string" || !key.includes("@") || key.length > 200) continue;
+/** 模型条目统一成 { id, alias }，去重去空、丢弃非法项 */
+function sanitizeModels(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const value = typeof item === "string" ? { id: item, alias: "" } : item;
     if (!value || typeof value !== "object") continue;
-    const models = Array.isArray(value.models)
-      ? [...new Set(value.models.filter((m) => typeof m === "string").map((m) => m.trim()).filter(Boolean))].slice(0, 200)
-      : [];
-    out[key] = {
-      apiKey: String(value.apiKey ?? ""),
-      model: String(value.model ?? "").trim(),
-      models,
-    };
-    if (Object.keys(out).length >= 20) break;
+    const id = String(value.id ?? "").trim().slice(0, 120);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, alias: String(value.alias ?? "").trim().slice(0, 60) });
   }
-  return out;
+  return out.slice(0, 300);
+}
+
+/**
+ * 服务商（模型供应商）条目收口。
+ * 服务商与模型全部由用户在「模型管理」里显式增删改，不存在任何自动建档 / 自动恢复：
+ * 只有用户点了「启用」，它的地址与 Key 才会写进当前连接参数。
+ */
+function sanitizeProvider(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id ?? "").trim().slice(0, 64) || uid();
+  return {
+    id,
+    name: String(raw.name ?? "").trim().slice(0, 40) || "未命名服务商",
+    protocol: PROTOCOL_PRESETS[raw.protocol] ? raw.protocol : "openai-compatible",
+    baseUrl: String(raw.baseUrl ?? "").trim().slice(0, 300),
+    apiKey: String(raw.apiKey ?? "").slice(0, 500),
+    model: String(raw.model ?? "").trim().slice(0, 120),
+    models: sanitizeModels(raw.models),
+  };
+}
+
+function sanitizeProviders(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(sanitizeProvider).filter(Boolean).slice(0, 30);
 }
 
 export function load() {
@@ -328,10 +350,140 @@ export function clearRecords() {
 
 export function setSettings(patch) {
   const next = { ...state.settings, ...patch };
-  // profiles 是从界面写进来的，也要过一遍白名单，别把脏数据留在运行态
-  if ("profiles" in patch) next.profiles = sanitizeProfiles(patch.profiles);
   state.settings = next;
   commit("settings");
+}
+
+/* ---------------- 模型管理：服务商 + 模型 ---------------- */
+export const getProviders = () => state.settings.providers;
+
+export function getProvider(id) {
+  return state.settings.providers.find((item) => item.id === id) ?? null;
+}
+
+export function getActiveProvider() {
+  return state.settings.providers.find((item) => item.id === state.settings.activeProviderId) ?? null;
+}
+
+function writeProviders(providers) {
+  state.settings = { ...state.settings, providers: sanitizeProviders(providers) };
+  commit("settings");
+}
+
+/** 新建一个服务商（默认不改动当前连接，用户点「启用」才生效） */
+export function addProvider(input) {
+  const provider = sanitizeProvider({ ...input, id: "" });
+  if (!provider) return null;
+  writeProviders([...state.settings.providers, provider]);
+  return getProvider(provider.id);
+}
+
+export function updateProvider(id, patch) {
+  const index = state.settings.providers.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  const merged = sanitizeProvider({ ...state.settings.providers[index], ...patch, id });
+  if (!merged) return null;
+  const providers = [...state.settings.providers];
+  providers[index] = merged;
+  writeProviders(providers);
+  return getProvider(id);
+}
+
+export function removeProvider(id) {
+  const before = state.settings.providers.length;
+  const providers = state.settings.providers.filter((item) => item.id !== id);
+  if (providers.length === before) return false;
+  const active = state.settings.activeProviderId === id ? "" : state.settings.activeProviderId;
+  state.settings = { ...state.settings, providers: sanitizeProviders(providers), activeProviderId: active };
+  commit("settings");
+  return true;
+}
+
+/** 启用：把这个服务商的地址 / Key / 模型写进当前连接参数（唯一的「切换」入口） */
+export function activateProvider(id) {
+  const provider = getProvider(id);
+  if (!provider) return null;
+  const model = provider.model || provider.models[0]?.id || "";
+  state.settings = {
+    ...state.settings,
+    protocol: provider.protocol,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey,
+    model,
+    activeProviderId: provider.id,
+    providers: state.settings.providers.map((item) =>
+      item.id === provider.id ? { ...item, model } : item,
+    ),
+  };
+  commit("settings");
+  return getProvider(id);
+}
+
+/**
+ * 当前连接参数改动：写进顶层，同时同步到已启用的服务商
+ * （只同步用户正在编辑的这一家，不会去碰别的服务商，也不会自动切换）
+ */
+export function patchConnection(patch) {
+  const allowed = {};
+  for (const key of ["protocol", "baseUrl", "apiKey", "model"]) {
+    if (key in patch) allowed[key] = patch[key];
+  }
+  if (!Object.keys(allowed).length) return;
+  const activeId = state.settings.activeProviderId;
+  const next = { ...state.settings, ...allowed };
+  if (activeId) {
+    next.providers = state.settings.providers.map((item) =>
+      item.id === activeId ? sanitizeProvider({ ...item, ...allowed, id: item.id }) ?? item : item,
+    );
+  }
+  state.settings = next;
+  commit("settings");
+}
+
+/** 往服务商里加模型（幂等：已存在的不重复加） */
+export function addProviderModels(id, list) {
+  const provider = getProvider(id);
+  if (!provider) return 0;
+  const incoming = sanitizeModels(list);
+  const known = new Set(provider.models.map((item) => item.id));
+  const fresh = incoming.filter((item) => !known.has(item.id));
+  if (!fresh.length) return 0;
+  const providers = state.settings.providers.map((item) =>
+    item.id === id ? { ...item, models: [...item.models, ...fresh] } : item,
+  );
+  writeProviders(providers);
+  return fresh.length;
+}
+
+export function removeProviderModel(id, modelId) {
+  const provider = getProvider(id);
+  if (!provider) return false;
+  const models = provider.models.filter((item) => item.id !== modelId);
+  if (models.length === provider.models.length) return false;
+  const providers = state.settings.providers.map((item) => {
+    if (item.id !== id) return item;
+    return { ...item, models, model: item.model === modelId ? models[0]?.id ?? "" : item.model };
+  });
+  writeProviders(providers);
+  if (state.settings.activeProviderId === id && state.settings.model === modelId) {
+    patchConnection({ model: models[0]?.id ?? "" });
+  }
+  return true;
+}
+
+/** 设为该服务商的默认模型；若它正是当前启用的服务商，同步到当前连接 */
+export function setProviderModel(id, modelId) {
+  const provider = getProvider(id);
+  if (!provider) return false;
+  const inList = provider.models.some((item) => item.id === modelId);
+  const providers = state.settings.providers.map((item) =>
+    item.id === id
+      ? { ...item, model: modelId, models: inList ? item.models : [...item.models, { id: modelId, alias: "" }] }
+      : item,
+  );
+  writeProviders(providers);
+  if (state.settings.activeProviderId === id) patchConnection({ model: modelId });
+  return true;
 }
 
 export function addCategory(name) {
@@ -357,16 +509,14 @@ export function exportPayload() {
     app: "ai-ledger",
     version: "0.1.0",
     exportedAt: new Date().toISOString(),
-    // 导出不泄露任何 Key：当前 Key 与服务商档案里的 Key 都要脱敏
+    // 导出不泄露任何 Key：当前连接的 Key 与每个服务商的 Key 都要脱敏
     settings: {
       ...state.settings,
       apiKey: state.settings.apiKey ? "***" : "",
-      profiles: Object.fromEntries(
-        Object.entries(state.settings.profiles ?? {}).map(([key, profile]) => [
-          key,
-          { ...profile, apiKey: profile.apiKey ? "***" : "" },
-        ]),
-      ),
+      providers: state.settings.providers.map((provider) => ({
+        ...provider,
+        apiKey: provider.apiKey ? "***" : "",
+      })),
     },
     records: [...state.records].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
   };

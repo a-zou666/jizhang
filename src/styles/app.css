@@ -1935,3 +1935,161 @@ a {
     display: none !important;
   }
 }
+
+/* ============ 模型管理（服务商 + 模型） ============ */
+.mm-hint {
+  margin-bottom: var(--space-3);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.mm-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 42vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mm-empty {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  text-align: center;
+}
+
+.mm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: var(--surface-hover);
+  border: 1.5px solid transparent;
+  transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+}
+
+.mm-row.is-active {
+  background: var(--app-accent-soft);
+  border-color: rgba(var(--app-accent-rgb), 0.4);
+}
+
+.mm-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: 0;
+  text-align: left;
+}
+
+.mm-row__main:active {
+  opacity: 0.7;
+}
+
+.mm-row__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+.mm-row__title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-row__desc {
+  max-width: 100%;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-row__action {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.mm-row__action:active {
+  background: var(--surface-active);
+}
+
+.mm-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(var(--app-accent-rgb), 0.18);
+  color: var(--app-accent-ink);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  line-height: 1.5;
+}
+
+.mm-badge--muted {
+  background: var(--surface-active);
+  color: var(--text-tertiary);
+}
+
+.mm-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mm-field__label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.mm-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-hover);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.mm-pick__id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-pick input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--app-accent);
+}
+
+.ghost-btn--danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger-light);
+}
