@@ -56,17 +56,18 @@ export function bindComposer({ onNeedSettings } = {}) {
   const resolveIds = (ids, byLineId) =>
     [...new Set(ids)].map((id) => byLineId.get(id)).filter(Boolean);
 
-  /** 账目行 HTML（复用确认页的 .confirm-row 结构） */
+  /** 账目行 HTML（专用结构：简单 flex，避免复用确认页的复杂网格导致排版异常） */
   const recordRowHtml = (record) => `
-    <div class="confirm-row">
-      <div class="confirm-row__main">
-        <span class="confirm-row__cat">
-          <span class="calendar-cell__dot" style="background:${escapeHtml(categoryColor(record.category))}"></span>
-          <span>${escapeHtml(record.category)}</span>
-        </span>
-        <span class="confirm-row__item">${escapeHtml(record.item)}</span>
-        <span class="confirm-row__amount t-numeric">${escapeHtml(yuan(record.amount))}</span>
-      </div>
+    <div class="intent-row">
+      <span class="intent-row__cat">
+        <span class="calendar-cell__dot" style="background:${escapeHtml(categoryColor(record.category))}"></span>
+        <span>${escapeHtml(record.category)}</span>
+      </span>
+      <span class="intent-row__main">
+        <span class="intent-row__item">${escapeHtml(record.item)}</span>
+        <span class="intent-row__date">${escapeHtml(record.date)}</span>
+      </span>
+      <span class="intent-row__amount">${escapeHtml(yuan(record.amount))}</span>
     </div>`;
 
   /** 删除确认弹窗 */
@@ -74,9 +75,7 @@ export function bindComposer({ onNeedSettings } = {}) {
     openModal(
       `
       <p class="modal-title">删除 ${records.length} 笔账目？</p>
-      <div class="intent-list">
-        ${records.map((record) => `${recordRowHtml(record)}<p class="intent-row-date t-caption">${escapeHtml(record.date)}</p>`).join("")}
-      </div>
+      <div class="intent-list">${records.map(recordRowHtml).join("")}</div>
       <div class="modal-actions">
         <button class="ghost-btn" id="delCancel" type="button">取消</button>
         <button class="primary-btn primary-btn--compact" id="delConfirm" type="button">删除</button>
@@ -95,8 +94,9 @@ export function bindComposer({ onNeedSettings } = {}) {
     );
   }
 
-  /** 查询结果弹窗：明细 + 本地计算的合计 */
-  function openQueryResult(records, reply) {
+  /** 查询结果弹窗：明细 + 本地计算的合计
+      注意：金额和笔数一律以本地为准，不展示大模型自己算的数字（它会算错） */
+  function openQueryResult(records) {
     const total = round2(records.reduce((sum, record) => sum + record.amount, 0));
     const shown = records.slice(0, 30);
     const more =
@@ -104,7 +104,6 @@ export function bindComposer({ onNeedSettings } = {}) {
     openModal(
       `
       <p class="modal-title">查询结果</p>
-      ${reply ? `<p class="t-footnote intent-reply">${escapeHtml(reply)}</p>` : ""}
       <div class="intent-list">${shown.map(recordRowHtml).join("")}${more}</div>
       <p class="query-total">共 ${records.length} 笔 · 合计 <b class="t-numeric">${escapeHtml(yuan(total))}</b></p>
       <div class="modal-actions">
@@ -129,7 +128,13 @@ export function bindComposer({ onNeedSettings } = {}) {
 
     busy = true;
     action.disabled = true;
-    const loading = toast("AI 正在解析…");
+    // 等待期间给用户可见的进度：每秒更新已等待秒数，超过 25 秒会自动放弃
+    const loading = toast("AI 正在解析…", "", 60000);
+    const startedAt = Date.now();
+    const ticker = window.setInterval(() => {
+      const seconds = Math.round((Date.now() - startedAt) / 1000);
+      loading.textContent = `AI 正在解析… 已等待 ${seconds} 秒`;
+    }, 1000);
     try {
       const { lines, byLineId } = buildLedger();
       const { op, items, ids, reply } = await parseIntent(text, getSettings(), lines);
@@ -162,14 +167,16 @@ export function bindComposer({ onNeedSettings } = {}) {
         input.value = "";
         input.blur();
         setSendMode(false);
-        openQueryResult(records, reply);
+        openQueryResult(records);
       } else {
         toast(reply || "这句话和记账无关，试试「昨天买鼠标 120」", "info");
       }
     } catch (error) {
       console.error(error);
-      toast(`解析失败：${error?.message ?? error}`, "error");
+      // 失败时不清空输入框：用户可以直接再点一次发送重试
+      toast(`解析失败：${error?.message ?? error}，可再发一次重试`, "error", 4000);
     } finally {
+      window.clearInterval(ticker);
       busy = false;
       action.disabled = false;
       loading?.remove?.();

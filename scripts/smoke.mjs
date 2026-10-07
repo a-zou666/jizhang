@@ -903,6 +903,56 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   ok("导入 JSON 的设置项与读本地共用一套收口：非法协议回退、weekStart/budget 归一、分类去重去空、URL 去空格");
 }
 
+/* --- 服务商档案：每个地址单独保存 Key / 模型，切换自动恢复 --- */
+{
+  const key = "openai-compatible@https://api.minimax.chat/v1";
+  store.setSettings({
+    protocol: "openai-compatible",
+    baseUrl: "https://api.minimax.chat/v1",
+    apiKey: "sk-minimax",
+    model: "MiniMax-Text-01",
+    profiles: {
+      [key]: { apiKey: "sk-minimax", model: "MiniMax-Text-01", models: ["MiniMax-Text-01", "abab6.5s-chat"] },
+      "openai-compatible@https://api.deepseek.com": {
+        apiKey: "sk-deepseek",
+        model: "deepseek-chat",
+        models: ["deepseek-chat", "deepseek-reasoner"],
+      },
+    },
+  });
+  const profiles = store.getSettings().profiles ?? {};
+  const savedMini = profiles[key];
+  const savedDeep = profiles["openai-compatible@https://api.deepseek.com"];
+  if (savedMini?.apiKey !== "sk-minimax" || savedDeep?.model !== "deepseek-chat") {
+    fail("服务商档案没有被持久化", JSON.stringify(profiles));
+  } else ok(`服务商档案已保存：Minimax(${savedMini.models.length} 个模型) / DeepSeek(${savedDeep.models.length} 个模型)`);
+
+  // 非法档案必须被清洗掉（不能把脏数据写进运行态）
+  store.setSettings({
+    profiles: { bad: 123, "also-bad": { apiKey: 1 }, [key]: { apiKey: "sk-x", model: "m", models: [1, "ok"] } },
+  });
+  const cleaned = store.getSettings().profiles ?? {};
+  if (cleaned.bad || cleaned["also-bad"] || cleaned[key]?.models?.includes(1)) {
+    fail("非法服务商档案没有过滤", JSON.stringify(cleaned));
+  } else ok("非法服务商档案被过滤（非对象 / 无 @ 分隔 / 非字符串模型）");
+
+  // 导出不能泄露 Key
+  const payload = store.exportPayload();
+  const leaked = Object.values(payload.settings.profiles ?? {}).some((p) => p.apiKey && p.apiKey !== "***");
+  if (leaked || payload.settings.apiKey === "sk-minimax") {
+    fail("导出的 JSON 泄露了 API Key", JSON.stringify(payload.settings).slice(0, 120));
+  } else ok("导出数据里的 API Key 已脱敏（含服务商档案）");
+
+  store.setSettings({ profiles: {} });
+}
+
+/* --- AI 解析必须有超时上限，避免界面一直无反馈 --- */
+if (typeof bridge.AI_TIMEOUT_MS === "number" && bridge.AI_TIMEOUT_MS > 0 && bridge.AI_TIMEOUT_MS <= 60000) {
+  ok(`AI 解析有超时上限：${bridge.AI_TIMEOUT_MS / 1000} 秒`);
+} else {
+  fail("bridge.js 缺少 AI_TIMEOUT_MS（或取值不合理）", String(bridge.AI_TIMEOUT_MS));
+}
+
 /* --- 存储故障不能静默：写入失败 / 本地数据损坏 / 坏记录被跳过都要能被 UI 看到 --- */
 store.replaceAll({ records: [], settings: {} });
 const storageEvents = [];

@@ -19,6 +19,39 @@ import { $, dateKey, el, round2, yuan } from "./util.js";
 
 const fetchedModels = new Map();
 
+/** 服务商档案的键：协议 + 归一化后的地址 */
+function profileKeyOf(settings) {
+  const url = String(settings.baseUrl ?? "").trim().replace(/\/+$/, "");
+  return `${settings.protocol ?? "openai-compatible"}@${url}`;
+}
+
+/** 把当前这组 Key / 模型 / 已拉取的模型写进该服务商的档案 */
+function saveProfile(patch = {}) {
+  const current = { ...getSettings(), ...patch };
+  const key = profileKeyOf(current);
+  if (!key.replace(/^[^@]*@/, "")) return; // 没有 Base URL 就先不建档
+  const profiles = { ...(current.profiles ?? {}) };
+  profiles[key] = {
+    apiKey: current.apiKey ?? "",
+    model: current.model ?? "",
+    models: fetchedModels.get(current.baseUrl) ?? profiles[key]?.models ?? [],
+  };
+  setSettings({ profiles });
+}
+
+/** 切到某个服务商时，自动恢复它上次保存的 Key 与模型 */
+function restoreProfile() {
+  const current = getSettings();
+  const profile = (current.profiles ?? {})[profileKeyOf(current)];
+  if (!profile) return false;
+  const patch = {};
+  if (profile.apiKey && profile.apiKey !== current.apiKey) patch.apiKey = profile.apiKey;
+  if (profile.model && profile.model !== current.model) patch.model = profile.model;
+  if (profile.models?.length) fetchedModels.set(current.baseUrl, profile.models);
+  if (Object.keys(patch).length) setSettings(patch);
+  return Boolean(Object.keys(patch).length || profile.models?.length);
+}
+
 function syncModelOptions(selectedModel = "") {
   const select = $("#modelName");
   const models = [...(fetchedModels.get(getSettings().baseUrl) ?? [])];
@@ -34,6 +67,11 @@ function syncModelOptions(selectedModel = "") {
 /* ---------------- 渲染 ---------------- */
 export function renderSettings() {
   const settings = getSettings();
+  // 重进设置页时，用该服务商档案里保存的模型清单填下拉框（省掉一次重新拉取）
+  const profile = (settings.profiles ?? {})[profileKeyOf(settings)];
+  if (profile?.models?.length && !fetchedModels.has(settings.baseUrl)) {
+    fetchedModels.set(settings.baseUrl, profile.models);
+  }
 
   $("#protocolValue").textContent = PROTOCOL_PRESETS[settings.protocol].label;
   syncInput($("#baseUrl"), settings.baseUrl);
@@ -70,15 +108,30 @@ export function bindSettings() {
         const presetUrls = Object.values(PROTOCOL_PRESETS).map((item) => item.baseUrl);
         if (!current.baseUrl || presetUrls.includes(current.baseUrl)) patch.baseUrl = preset.baseUrl;
         setSettings(patch);
-        toast(`已切换为${preset.label}`, "ok");
+        // 换协议等于换服务商：自动把这家上次保存的 Key / 模型带回来
+        const restored = restoreProfile();
+        renderSettings();
+        toast(restored ? `已切换为${preset.label}（已恢复该服务商的 Key 与模型）` : `已切换为${preset.label}`, "ok");
       },
     });
   });
 
   /* API 参数 */
-  $("#baseUrl").addEventListener("change", (event) => setSettings({ baseUrl: event.target.value.trim() }));
-  $("#modelName").addEventListener("change", (event) => setSettings({ model: event.target.value }));
-  $("#apiKey").addEventListener("change", (event) => setSettings({ apiKey: event.target.value.trim() }));
+  $("#baseUrl").addEventListener("change", (event) => {
+    setSettings({ baseUrl: event.target.value.trim() });
+    // Base URL 就是服务商身份：换了它就把该服务商的存档配置恢复出来
+    const restored = restoreProfile();
+    renderSettings();
+    if (restored) toast("已恢复该服务商保存的 Key 与模型", "ok");
+  });
+  $("#modelName").addEventListener("change", (event) => {
+    setSettings({ model: event.target.value });
+    saveProfile({ model: event.target.value });
+  });
+  $("#apiKey").addEventListener("change", (event) => {
+    setSettings({ apiKey: event.target.value.trim() });
+    saveProfile({ apiKey: event.target.value.trim() });
+  });
 
   $("#toggleKey").addEventListener("click", () => {
     const input = $("#apiKey");
@@ -117,6 +170,8 @@ export function bindSettings() {
       const selected = models.includes(current.model) ? current.model : models[0];
       syncModelOptions(selected);
       setSettings({ model: selected });
+      // 把这家服务商的模型清单一起存进档案，下次切回来不用重新拉取
+      saveProfile({ model: selected });
       toast(`已加载 ${models.length} 个模型`, "ok");
     } finally {
       btn.disabled = false;

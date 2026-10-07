@@ -57,18 +57,34 @@ export async function parseAccounting(text, settings) {
  * 由调用方构造；ids 返回的是账目行序号（从 1 开始），调用方据此映射回真实记录。
  * @returns {Promise<{op: "add"|"del"|"query"|"none", items: Array, ids: number[], reply: string}>}
  */
+/** 解析等待上限：超过就放弃并让用户重试，避免界面一直转圈没有反馈 */
+export const AI_TIMEOUT_MS = 25000;
+
 export async function parseIntent(text, settings, ledger) {
   if (!hasBackend()) return mockIntent(text, ledger);
 
-  const result = await invoke("process_intent", {
-    text,
-    protocol: settings.protocol,
-    baseUrl: settings.baseUrl,
-    apiKey: settings.apiKey,
-    apiModel: settings.model,
-    categories: settings.categories,
-    ledger,
-  });
+  const call = () =>
+    invoke("process_intent", {
+      text,
+      protocol: settings.protocol,
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      apiModel: settings.model,
+      categories: settings.categories,
+      ledger,
+    });
+
+  let result;
+  try {
+    result = await withTimeout(call(), AI_TIMEOUT_MS);
+  } catch (error) {
+    // 超时或后端异常统一成一句人话，前端直接展示并可重试
+    throw new Error(
+      error?.message === "请求超时"
+        ? `模型 ${AI_TIMEOUT_MS / 1000} 秒未响应，请稍后重试或换一个模型`
+        : String(error?.message ?? error),
+    );
+  }
 
   const items = (Array.isArray(result?.items) ? result.items : [])
     .map(normalizeRaw)

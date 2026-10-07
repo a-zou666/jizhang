@@ -40,6 +40,8 @@ const DEFAULT_STATE = () => ({
     weekStart: 1,
     budget: 5000,
     categories: [...DEFAULT_CATEGORIES],
+    // 服务商档案：{ "协议@BaseURL": { apiKey, model, models[] } }
+    profiles: {},
   },
 });
 
@@ -118,7 +120,32 @@ function sanitizeSettings(raw, base) {
     weekStart: Number(raw.weekStart) === 0 ? 0 : 1,
     budget: Number.isFinite(budget) ? Math.max(0, round2(budget)) : base.budget,
     categories: categories.length ? categories : [...base.categories],
+    profiles: sanitizeProfiles(raw.profiles),
   };
+}
+
+/**
+ * 每个 AI 服务商（协议 + Base URL）单独保存一份配置：API Key、上次选的模型、
+ * 以及从该服务商拉取到的真实模型列表。这样在 Minimax / DeepSeek / OpenAI 之间
+ * 来回切换时，不用重填 Key，也不用重新拉模型。
+ */
+function sanitizeProfiles(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof key !== "string" || !key.includes("@") || key.length > 200) continue;
+    if (!value || typeof value !== "object") continue;
+    const models = Array.isArray(value.models)
+      ? [...new Set(value.models.filter((m) => typeof m === "string").map((m) => m.trim()).filter(Boolean))].slice(0, 200)
+      : [];
+    out[key] = {
+      apiKey: String(value.apiKey ?? ""),
+      model: String(value.model ?? "").trim(),
+      models,
+    };
+    if (Object.keys(out).length >= 20) break;
+  }
+  return out;
 }
 
 export function load() {
@@ -300,7 +327,10 @@ export function clearRecords() {
 }
 
 export function setSettings(patch) {
-  state.settings = { ...state.settings, ...patch };
+  const next = { ...state.settings, ...patch };
+  // profiles 是从界面写进来的，也要过一遍白名单，别把脏数据留在运行态
+  if ("profiles" in patch) next.profiles = sanitizeProfiles(patch.profiles);
+  state.settings = next;
   commit("settings");
 }
 
@@ -327,7 +357,17 @@ export function exportPayload() {
     app: "ai-ledger",
     version: "0.1.0",
     exportedAt: new Date().toISOString(),
-    settings: { ...state.settings, apiKey: state.settings.apiKey ? "***" : "" },
+    // 导出不泄露任何 Key：当前 Key 与服务商档案里的 Key 都要脱敏
+    settings: {
+      ...state.settings,
+      apiKey: state.settings.apiKey ? "***" : "",
+      profiles: Object.fromEntries(
+        Object.entries(state.settings.profiles ?? {}).map(([key, profile]) => [
+          key,
+          { ...profile, apiKey: profile.apiKey ? "***" : "" },
+        ]),
+      ),
+    },
     records: [...state.records].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
   };
 }
