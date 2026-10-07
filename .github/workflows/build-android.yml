@@ -1,0 +1,76 @@
+name: Build Android App
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Static checks (syntax + smoke test)
+        run: npm run check
+
+      - name: Initialize Android project
+        run: npm run tauri android init
+
+      # 麦克风权限必须在清单里声明，否则 Android 会直接拒绝录音请求
+      # （用户看不到授权弹窗，WebView 把 getUserMedia 判为 NotAllowedError）
+      - name: Inject microphone permission into AndroidManifest
+        run: node scripts/inject-android-permissions.mjs
+
+      # 再校验一遍：权限确实已声明，且排在 <application> 之前
+      - name: Verify microphone permission
+        run: |
+          node scripts/inject-android-permissions.mjs --check
+          grep -n "uses-permission" src-tauri/gen/android/app/src/main/AndroidManifest.xml
+
+      - name: Build APK (Unsigned)
+        run: npm run tauri android build
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jizhang-android-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+          if-no-files-found: error
+
+      - name: Publish APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-build-${{ github.run_number }}
+          name: Android Build ${{ github.run_number }}
+          generate_release_notes: true
+          files: src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk

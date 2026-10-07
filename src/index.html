@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="color-scheme" content="light" />
+    <title>AI 记账</title>
+    <link rel="stylesheet" href="./styles/tokens.css" />
+    <link rel="stylesheet" href="./styles/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="pages" id="pages">
+        <!-- ============================================================
+             七、首页 · 日历视图
+             ============================================================ -->
+        <section class="page is-active" data-page="home" id="page-home" aria-label="首页">
+          <header class="home-header">
+            <div class="home-header__row">
+              <p class="home-header__greet" id="homeGreet">你好呀</p>
+              <button class="today-btn" id="todayBtn" type="button">
+                <span data-icon="calendarToday" aria-hidden="true"></span>
+                <span class="today-btn__text">今天</span>
+              </button>
+            </div>
+          </header>
+
+          <div class="page-body" id="homeBody">
+            <!-- 月进度：从头部卡片改为整行概览，压缩纵向空间 -->
+            <section class="spend-overview" id="monthProgress" aria-label="本月支出概览">
+              <div class="spend-overview__top">
+                <span class="spend-overview__caption">本月支出</span>
+                <span class="spend-overview__ratio" id="monthRatio">0%</span>
+              </div>
+              <p class="spend-overview__amount">
+                <span class="spend-overview__spent t-numeric" id="monthSpent">¥0</span>
+                <span class="spend-overview__budget t-numeric" id="monthBudget">/ ¥5,000</span>
+              </p>
+              <div
+                class="spend-overview__track"
+                id="progressTrack"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              >
+                <div class="spend-overview__fill" id="progressFill"></div>
+              </div>
+              <p class="spend-overview__hint t-footnote" id="monthHint">设定一个预算，跟踪每月支出</p>
+            </section>
+
+            <!-- 日历网格 -->
+            <section class="panel calendar-panel glass-sheen soft-glass" id="calendarCard">
+              <header class="panel__head calendar-nav">
+                <button class="cal-nav" id="calPrev" type="button" aria-label="上个月">‹</button>
+                <h2
+                  class="panel__title t-title3 month-btn"
+                  id="monthTitle"
+                  role="button"
+                  tabindex="0"
+                  aria-label="切换月份"
+                >—</h2>
+                <button class="cal-nav" id="calNext" type="button" aria-label="下个月">›</button>
+              </header>
+              <p class="calendar-panel__summary t-footnote">
+                <span>本月支出 <b class="t-numeric" id="calendarSpent">¥0</b></span>
+                <span class="calendar-panel__count" id="calendarCount"></span>
+              </p>
+              <div class="weekday-row" id="weekdayRow" aria-hidden="true"></div>
+              <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="记账日历"></div>
+            </section>
+
+            <!-- 明细列表 -->
+            <section class="panel detail-panel glass-sheen soft-glass">
+              <header class="panel__head">
+                <h2 class="panel__title t-title3" id="detailTitle">今日明细</h2>
+                <span class="panel__count t-footnote" id="detailCount"></span>
+              </header>
+              <ul class="detail-list" id="detailList"></ul>
+              <div class="detail-total">
+                <span class="detail-total__label">合计</span>
+                <span class="detail-total__value t-numeric" id="detailTotal">¥0</span>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ============================================================
+             十、设置页
+             ============================================================ -->
+        <section class="page" data-page="settings" id="page-settings" aria-label="设置">
+          <header class="settings-header">
+            <div class="settings-header__row">
+              <h1 class="t-hero">设置</h1>
+            </div>
+            <p class="settings-header__hint">
+              账号信息只保存在本机，仅在你主动调用时才会发送到 API。
+            </p>
+          </header>
+
+          <div class="page-body">
+            <div class="settings-section" data-section="connection">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">连接</p>
+                  <p class="settings-section__desc">配置 AI 解析服务，让一句话就能变成记账记录</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--accent settings-group--glass soft-glass">
+                <button
+                  class="settings-row is-button"
+                  id="rowProtocol"
+                  type="button"
+                  aria-haspopup="dialog"
+                >
+                  <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
+                  <span class="settings-row__label">协议类型</span>
+                  <span class="settings-row__value" id="protocolValue">OpenAI 兼容</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+
+                <div class="settings-row settings-row--field">
+                  <label class="settings-field__caption" for="baseUrl">
+                    <span class="settings-field__icon" data-icon="chevronRight" aria-hidden="true"></span>
+                    Base URL
+                  </label>
+                  <input
+                    class="settings-input"
+                    id="baseUrl"
+                    type="url"
+                    inputmode="url"
+                    spellcheck="false"
+                    autocapitalize="off"
+                    placeholder="https://api.example.com"
+                  />
+                </div>
+
+                <div class="settings-row settings-row--field">
+                  <label class="settings-field__caption" for="apiKey">
+                    <span class="settings-field__icon" data-icon="sparkles" aria-hidden="true"></span>
+                    API Key
+                  </label>
+                  <div class="settings-input-row">
+                    <input
+                      class="settings-input"
+                      id="apiKey"
+                      type="password"
+                      spellcheck="false"
+                      autocapitalize="off"
+                      placeholder="sk-..."
+                    />
+                    <button class="show-key-btn" id="toggleKey" type="button">显示</button>
+                  </div>
+                </div>
+
+                <div class="settings-row settings-row--field">
+                  <label class="settings-field__caption" for="modelName">
+                    <span class="settings-field__icon" data-icon="chevronRight" aria-hidden="true"></span>
+                    选择模型
+                  </label>
+                  <div class="settings-input-row">
+                    <select class="settings-input" id="modelName" disabled aria-label="选择 API 模型">
+                      <option value="">先拉取可用模型</option>
+                    </select>
+                    <button class="show-key-btn" id="fetchModels" type="button" aria-label="拉取模型" title="拉取模型">
+                      <span data-icon="refresh" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </div>
+
+                <button class="settings-row is-button settings-row--action" id="testBtn" type="button">
+                  <span class="settings-row__icon" data-icon="check" aria-hidden="true"></span>
+                  <span class="settings-row__label" id="testBtnLabel">测试连接</span>
+                  <span class="settings-row__value" id="testValue"></span>
+                </button>
+                <div class="test-result" id="testResult" role="status" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="settings-section" data-section="preferences">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">偏好</p>
+                  <p class="settings-section__desc">按你的习惯调整日期、预算与分类</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--glass">
+                <button class="settings-row is-button" id="rowWeekStart" type="button">
+                  <span class="settings-row__icon" data-icon="calendarToday" aria-hidden="true"></span>
+                  <span class="settings-row__label">周起始日</span>
+                  <span class="settings-row__value" id="weekStartValue">周一</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+                <button class="settings-row is-button" id="rowBudget" type="button">
+                  <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
+                  <span class="settings-row__label">月预算</span>
+                  <span class="settings-row__value t-numeric" id="budgetValue">¥5,000</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+                <button class="settings-row is-button" id="rowCategories" type="button">
+                  <span class="settings-row__icon" data-icon="plus" aria-hidden="true"></span>
+                  <span class="settings-row__label">分类管理</span>
+                  <span class="settings-row__value" id="categoryValue"></span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-section" data-section="data">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">数据</p>
+                  <p class="settings-section__desc">备份与清空：所有数据都只保存在本机</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--glass">
+                <button class="settings-row is-button" id="rowExport" type="button">
+                  <span class="settings-row__icon" data-icon="download" aria-hidden="true"></span>
+                  <span class="settings-row__label">数据导出</span>
+                  <span class="settings-row__value">JSON / CSV</span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+                <button class="settings-row is-button settings-row--danger" id="rowClear" type="button">
+                  <span class="settings-row__icon" data-icon="trash" aria-hidden="true"></span>
+                  <span class="settings-row__label">清空全部账单</span>
+                </button>
+              </div>
+            </div>
+
+            <p class="app-version" id="appVersion">App v0.1.0</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- ================================================================
+           八、底部停靠区：输入条 + 导航栏
+           ================================================================ -->
+      <div class="dock" id="dock">
+        <form class="composer" id="composer" autocomplete="off" novalidate>
+          <button class="composer__plus" id="composerPlus" type="button" aria-label="快捷分类">
+            <span data-icon="plus" aria-hidden="true"></span>
+          </button>
+          <input
+            class="composer__input"
+            id="composerInput"
+            type="text"
+            enterkeyhint="send"
+            placeholder="说点什么，比如“昨天买鼠标花了120”"
+            aria-label="记账输入"
+          />
+          <button class="composer__action" id="composerAction" type="button" aria-label="添加一笔">
+            <span data-icon="plus" aria-hidden="true"></span>
+          </button>
+        </form>
+
+        <nav class="tabbar" id="tabbar" aria-label="主导航">
+          <button class="tabbar__item is-active" data-tab="home" type="button">
+            <span class="tabbar__icon" data-tab-icon="home" aria-hidden="true"></span>
+            <span class="tabbar__label">首页</span>
+          </button>
+          <button class="tabbar__item" data-tab="settings" type="button">
+            <span class="tabbar__icon" data-tab-icon="settings" aria-hidden="true"></span>
+            <span class="tabbar__label">设置</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+
+    <!-- ==================================================================
+         九、AI 解析确认页（半屏弹窗）
+         ================================================================== -->
+    <div class="backdrop" id="backdrop"></div>
+    <section
+      class="sheet"
+      id="confirmSheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sheetTitle"
+      hidden
+    >
+      <div class="sheet__grabber"></div>
+      <header class="sheet__head">
+        <h2 class="t-title3" id="sheetTitle">确认记账</h2>
+        <button class="sheet__close" id="sheetClose" type="button" aria-label="关闭">
+          <span data-icon="close" aria-hidden="true"></span>
+        </button>
+      </header>
+      <div class="sheet__body" id="sheetBody"></div>
+      <div class="sheet__summary">
+        <span class="sheet__summary-label">共 <b id="sheetCount">0</b> 笔</span>
+        <span class="sheet__summary-value t-numeric" id="sheetTotal">¥0</span>
+      </div>
+      <button class="primary-btn" id="confirmBtn" type="button">
+        <span data-icon="check" aria-hidden="true"></span>确认入账
+      </button>
+    </section>
+
+    <!-- 通用模态弹窗 -->
+    <div class="modal-root" id="modalRoot" role="dialog" aria-modal="true" hidden>
+      <div class="modal-root__panel soft-glass" id="modalPanel"></div>
+    </div>
+
+    <div class="toast-root" id="toastRoot" aria-live="polite"></div>
+    <div class="fly-layer" id="flyLayer" aria-hidden="true"></div>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
