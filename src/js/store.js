@@ -32,6 +32,8 @@ export const PROTOCOL_ORDER = ["claude", "openai", "openai-compatible"];
 
 const DEFAULT_STATE = () => ({
   records: [],
+  // 对话页的消息流（只存最近 CHAT_LIMIT 条，纯本机）
+  chat: [],
   settings: {
     protocol: "openai-compatible",
     baseUrl: "",
@@ -149,6 +151,63 @@ function sanitizeModels(raw) {
   return out.slice(0, 300);
 }
 
+/* ---------------- 对话页消息流 ---------------- */
+const CHAT_LIMIT = 200;
+
+/**
+ * 消息：{ id, role: "user" | "assistant", text, kind, items[], state, at }
+ * kind: text（纯聊天）/ add（待入账）/ del（待删除）/ query（查询结果）
+ * 账目快照直接存在消息里，重进界面才能原样还原，不用重新问一遍 AI
+ */
+function sanitizeChatMessage(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const role = raw.role === "user" ? "user" : "assistant";
+  const kind = ["text", "add", "del", "query"].includes(raw.kind) ? raw.kind : "text";
+  const items = Array.isArray(raw.items)
+    ? raw.items.map(sanitizeRecord).filter(Boolean).slice(0, 50)
+    : [];
+  return {
+    id: String(raw.id ?? uid()),
+    role,
+    text: String(raw.text ?? "").slice(0, 2000),
+    kind: kind === "text" || items.length ? kind : "text",
+    items,
+    state: ["pending", "done", "ignored", "error"].includes(raw.state) ? raw.state : "done",
+    at: Number.isFinite(Number(raw.at)) ? Number(raw.at) : Date.now(),
+  };
+}
+
+function sanitizeChat(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(sanitizeChatMessage).filter(Boolean).slice(-CHAT_LIMIT);
+}
+
+export const getChat = () => state.chat;
+
+export function appendChat(message) {
+  const clean = sanitizeChatMessage(message);
+  if (!clean) return null;
+  state.chat = [...state.chat, clean].slice(-CHAT_LIMIT);
+  commit("chat");
+  return clean;
+}
+
+export function updateChat(id, patch) {
+  const index = state.chat.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  const merged = sanitizeChatMessage({ ...state.chat[index], ...patch, id });
+  if (!merged) return null;
+  state.chat = state.chat.map((item, i) => (i === index ? merged : item));
+  commit("chat");
+  return merged;
+}
+
+export function clearChat() {
+  if (!state.chat.length) return;
+  state.chat = [];
+  commit("chat");
+}
+
 /** 单月预算的键必须是 YYYY-MM，金额非负，最多存 240 个月（20 年） */
 function sanitizeBudgets(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
@@ -202,6 +261,7 @@ export function load() {
       next.records = parsed.records.map(sanitizeRecord).filter(Boolean);
       dropped = parsed.records.length - next.records.length;
     }
+    next.chat = sanitizeChat(parsed?.chat);
     next.settings = sanitizeSettings(parsed?.settings, next.settings);
     state = next;
     if (dropped > 0) reportStorage({ kind: "dropped", dropped });
@@ -578,6 +638,7 @@ export function exportPayload() {
 export function replaceAll(next) {
   const fresh = DEFAULT_STATE();
   if (Array.isArray(next?.records)) fresh.records = next.records.map(sanitizeRecord).filter(Boolean);
+  fresh.chat = sanitizeChat(next?.chat);
   // 导入的 JSON 也要走同一套校验，别让脏数据从这条路绕过 load()
   fresh.settings = sanitizeSettings(next?.settings, fresh.settings);
   state = fresh;

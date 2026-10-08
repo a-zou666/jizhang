@@ -287,15 +287,18 @@ else ok(`index.html 的 ${idsInHtml.length} 个 id 均已解析`);
 
 /* --- 外观引擎已移除：统一使用 tokens.css 静态设计令牌，不再逐界面配置（相关测试随之删除） --- */
 
-/* --- 语音输入已下线：composer.js 不应再触发任何录音/转写逻辑 --- */
+/* --- 语音输入已下线：前端模块不应再触发任何录音/转写逻辑 --- */
 documentStub.body.append(makeNode("div", documentStub)); // toastRoot 兜底
-const composerSource = readFileSync(resolve(ROOT, "src/js/composer.js"), "utf8");
+const frontSources = readdirSync(resolve(ROOT, "src/js"))
+  .filter((file) => file.endsWith(".js"))
+  .map((file) => readFileSync(resolve(ROOT, "src/js", file), "utf8"))
+  .join("\n");
 const bridgeSource = readFileSync(resolve(ROOT, "src/js/bridge.js"), "utf8");
 const indexSource = readFileSync(resolve(ROOT, "src/index.html"), "utf8");
 
-if (/SpeechRecognition|webkitSpeechRecognition|MediaRecorder|navigator\.mediaDevices/.test(composerSource)) {
-  fail("composer.js 仍残留语音引擎相关代码（已下线）");
-} else ok("composer.js 完全移除了语音引擎代码");
+if (/SpeechRecognition|webkitSpeechRecognition|MediaRecorder|navigator\.mediaDevices/.test(frontSources)) {
+  fail("前端模块仍残留语音引擎相关代码（已下线）");
+} else ok("前端模块完全移除了语音引擎代码");
 
 if (/transcribeAudio|transcribe_audio|blobToBase64/.test(bridgeSource)) {
   fail("bridge.js 仍导出 transcribeAudio 或保留 blobToBase64");
@@ -353,26 +356,32 @@ if (appStarted) {
   else ok(`问候语附带今日小结：「${greetText}」`);
 
   const dock = documentStub.getElementById("dock");
-  const composerNode = documentStub.getElementById("composer");
   const tabbarNode = documentStub.getElementById("tabbar");
-  if (!dock || !composerNode || !tabbarNode) {
-    fail("底部停靠区缺少输入条或导航栏");
+  if (!dock || !tabbarNode) {
+    fail("底部停靠区缺少导航栏");
   } else {
     const insideDock = (n) => {
       let cur = n.parentNode;
       while (cur) { if (cur === dock) return true; cur = cur.parentNode; }
       return false;
     };
-    if (!insideDock(composerNode) || !insideDock(tabbarNode)) {
-      fail("输入条/导航栏不在 .dock 内");
-    } else ok("输入条与导航栏同属 .dock 停靠区");
+    if (!insideDock(tabbarNode)) fail("导航栏不在 .dock 内");
+    else ok("导航栏位于 .dock 停靠区（输入条已改为独立对话页）");
   }
+
+  // 对话页：三个 Tab + 消息流 + 输入区
+  const tabs = [...documentStub.querySelectorAll(".tabbar__item")].map((n) => n.dataset.tab);
+  const chatIds = ["chatList", "chatInput", "chatSend", "chatScroll", "chatModel"];
+  const missingChat = chatIds.filter((id) => !documentStub.getElementById(id));
+  if (!tabs.includes("chat") || missingChat.length) {
+    fail("对话页装配不完整", `tabs=${tabs.join("/")} 缺失=${missingChat.join(",")}`);
+  } else ok(`对话页装配完整：Tab(${tabs.join("/")}) + 消息流 + 输入框 + 发送`);
 }
 
 /* --- index.html 结构契约：底部停靠区必须是单层容器 --- */
 const dockBlock = html.slice(html.indexOf('id="dock"'), html.indexOf("</div>", html.indexOf('id="dock"')));
 if (html.indexOf('class="dock"') === -1) fail("缺少 .dock 容器");
-else ok("index.html 使用单层 .dock 容器（输入条 + 导航栏）");
+else ok("index.html 使用单层 .dock 容器（导航栏）");
 
 /* --- CSS 契约：外观变量与关键选择器存在 --- */
 const appCss = readFileSync(resolve(ROOT, "src/styles/app.css"), "utf8");
@@ -447,7 +456,7 @@ const iconKeys = new Set(
     (match) => match[1],
   ),
 );
-const jsSources = ["ui.js", "confirm.js", "composer.js", "settings.js", "home.js", "detail.js", "calendar.js"]
+const jsSources = ["ui.js", "confirm.js", "chat.js", "quickadd.js", "settings.js", "home.js", "detail.js", "calendar.js"]
   .map((file) => readFileSync(resolve(ROOT, "src/js", file), "utf8"))
   .join("\n");
 const usedIcons = new Set([
@@ -1071,6 +1080,36 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   } else ok("当月预算入口就在首页「本月支出」旁边：翻到哪个月，改的就是哪个月");
 
   store.replaceAll({ records: [], settings: {} });
+}
+
+/* --- 对话页：消息流 + 内联卡片在 DOM 桩里渲染一遍 --- */
+{
+  const chat = await import(new URL("../src/js/chat.js", import.meta.url));
+  const list = documentStub.getElementById("chatList");
+  store.clearChat();
+  chat.renderChat();
+  if (list.childNodes.length !== 0) {
+    fail("空对话不该有气泡", String(list.childNodes.length));
+  } else ok("对话页空态：消息区为空，展示欢迎语与示例");
+
+  store.appendChat({ role: "user", text: "昨天买鼠标 120", kind: "text", state: "done" });
+  store.appendChat({
+    role: "assistant",
+    text: "识别到这些账目，确认后入账：",
+    kind: "add",
+    items: [{ id: "chat-x", date: "2026-10-08", item: "鼠标", category: "数码", amount: 120 }],
+    state: "pending",
+  });
+  chat.renderChat();
+  const rows = list.querySelectorAll(".chat-row");
+  const bubbleText = rows.map((row) => String(row.textContent)).join(" | ");
+  if (rows.length !== 2 || !bubbleText.includes("鼠标") || !bubbleText.includes("确认入账")) {
+    fail("对话气泡 / 卡片渲染不完整", `rows=${rows.length} ${bubbleText.slice(0, 160)}`);
+  } else ok("对话页渲染正常：用户气泡 + 助理卡片（账目行 + 确认入账 / 忽略）");
+
+  store.clearChat();
+  if (store.getChat().length !== 0) fail("清空对话没有生效");
+  else ok("「清空对话」只清聊天记录，不影响账目");
 }
 
 /* --- AI 解析必须有超时上限，避免界面一直无反馈 --- */

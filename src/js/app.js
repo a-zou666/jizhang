@@ -1,10 +1,11 @@
 /** 应用入口：装配状态、视图与事件 */
 
 import { bindCalendarNav, bindCalendarSwipe } from "./calendar.js";
-import { bindComposer } from "./composer.js";
+import { bindChat, renderChat } from "./chat.js";
 import { bindConfirmSheet } from "./confirm.js";
 import { closeOpenRows } from "./gesture.js";
 import { openBudgetEditor, openMonthPicker, renderHome } from "./home.js";
+import { openQuickAdd } from "./quickadd.js";
 import { hydrateIcons, navIcon } from "./icons.js";
 import { bindSettings, renderSettings } from "./settings.js";
 import { load, onStorageError, subscribe } from "./store.js";
@@ -18,7 +19,7 @@ onStorageError(reportStorageProblem);
 hydrateIcons();
 bindConfirmSheet();
 bindSettings();
-bindComposer({ onNeedSettings: () => switchTab("settings") });
+bindChat({ onNeedSettings: () => switchTab("settings") });
 bindCalendarSwipe();
 bindCalendarNav();
 bindChrome();
@@ -31,6 +32,7 @@ switchTab(view.tab, { force: true });
 /* ---------------- 渲染 ---------------- */
 function renderAll() {
   renderHome();
+  renderChat();
   renderSettings();
 }
 
@@ -74,6 +76,9 @@ function bindChrome() {
 
   // 当月预算就填在首页「本月支出」旁边：翻到哪个月，改的就是哪个月
   $("#monthBudgetBtn").addEventListener("click", openBudgetEditor);
+
+  // 底部输入条已换成独立的对话页：首页只留一个「记一笔」的悬浮按钮
+  $("#fabAdd").addEventListener("click", openQuickAdd);
 
   for (const item of $$(".tabbar__item")) {
     item.addEventListener("click", () => switchTab(item.dataset.tab));

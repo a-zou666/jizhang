@@ -27,6 +27,12 @@ export const ICONS = {
     <path d="${GEAR_PATH}" fill="currentColor" />
     <circle cx="12" cy="12" r="3" fill="#ffffff" />`,
 
+  /* 导航 · 对话 */
+  chatOutline: `
+    <path d="M20.1 11.6c0 4.1-3.63 7.42-8.1 7.42-.93 0-1.83-.14-2.66-.4L4.6 20.4l1.2-3.5a7.1 7.1 0 0 1-1.7-4.3c0-4.1 3.63-7.42 8.1-7.42s8.1 3.32 8.1 7.42Z" ${STROKE} />`,
+  chatFilled: `
+    <path d="M12 3.6c4.66 0 8.4 3.32 8.4 7.42 0 1.5-.51 2.9-1.4 4.08.3.9.72 1.9 1.14 2.83.3.66-.4 1.36-1.06 1.08l-3.3-1.4c-.86.24-1.77.37-2.72.37-4.65 0-8.4-3.32-8.4-7.42C4.66 6.92 7.4 3.6 12 3.6Z" fill="currentColor" />`,
+
   /* 首页 · 今天 */
   calendarToday: `
     <rect x="3.25" y="4.9" width="17.5" height="16" rx="3.4" ${STROKE} />
@@ -81,6 +87,7 @@ export function icon(name, { size = 24, className = "" } = {}) {
 export function navIcon(tab, active) {
   const size = active ? 24 : 22;
   if (tab === "home") return icon(active ? "calendarFilled" : "calendarOutline", { size });
+  if (tab === "chat") return icon(active ? "chatFilled" : "chatOutline", { size });
   return icon(active ? "settingsFilled" : "settingsOutline", { size });
 }
 

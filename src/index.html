@@ -95,6 +95,9 @@
                 <span class="detail-total__value t-numeric" id="detailTotal">¥0</span>
               </div>
             </section>
+            <button class="fab" id="fabAdd" type="button" aria-label="记一笔">
+              <span data-icon="plus" aria-hidden="true"></span>
+            </button>
           </div>
         </section>
 
@@ -191,33 +194,59 @@
             <p class="app-version" id="appVersion">App v0.1.0</p>
           </div>
         </section>
+
+        <!-- ================================================================
+             对话页：跟 AI 聊天式记账
+             ================================================================ -->
+        <section class="page" data-page="chat" id="page-chat" aria-label="对话">
+          <header class="chat-header">
+            <div class="chat-header__row">
+              <p class="chat-header__title">AI 记账助手</p>
+              <button class="chat-header__clear" id="chatClear" type="button" hidden>清空</button>
+            </div>
+            <button class="chat-model" id="chatModel" type="button">
+              <span data-icon="sparkles" aria-hidden="true"></span>
+              <span id="chatModelName">未启用服务商</span>
+              <span data-icon="chevronRight" aria-hidden="true"></span>
+            </button>
+          </header>
+
+          <div class="chat-scroll" id="chatScroll">
+            <div class="chat-empty" id="chatEmpty">
+              <p class="chat-empty__title">用一句话记账</p>
+              <p class="chat-empty__desc">说人话就行：「昨天买鼠标花了 120」「这个月吃饭花了多少」</p>
+            </div>
+            <div class="chat-list" id="chatList"></div>
+            <div class="chip-row" id="chatSuggest"></div>
+          </div>
+
+          <div class="chat-composer">
+            <textarea
+              class="chat-composer__input"
+              id="chatInput"
+              rows="1"
+              placeholder="说点什么…"
+              aria-label="对话输入"
+            ></textarea>
+            <button class="chat-composer__send" id="chatSend" type="button" aria-label="发送">
+              <span data-icon="send" aria-hidden="true"></span>
+            </button>
+          </div>
+        </section>
       </div>
 
       <!-- ================================================================
-           八、底部停靠区：输入条 + 导航栏
+           八、底部导航栏
            ================================================================ -->
       <div class="dock" id="dock">
-        <form class="composer" id="composer" autocomplete="off" novalidate>
-          <button class="composer__plus" id="composerPlus" type="button" aria-label="快捷分类">
-            <span data-icon="plus" aria-hidden="true"></span>
-          </button>
-          <input
-            class="composer__input"
-            id="composerInput"
-            type="text"
-            enterkeyhint="send"
-            placeholder="说点什么，比如“昨天买鼠标花了120”"
-            aria-label="记账输入"
-          />
-          <button class="composer__action" id="composerAction" type="button" aria-label="添加一笔">
-            <span data-icon="plus" aria-hidden="true"></span>
-          </button>
-        </form>
-
         <nav class="tabbar" id="tabbar" aria-label="主导航">
           <button class="tabbar__item is-active" data-tab="home" type="button">
             <span class="tabbar__icon" data-tab-icon="home" aria-hidden="true"></span>
             <span class="tabbar__label">首页</span>
+          </button>
+          <button class="tabbar__item" data-tab="chat" type="button">
+            <span class="tabbar__icon" data-tab-icon="chat" aria-hidden="true"></span>
+            <span class="tabbar__label">对话</span>
           </button>
           <button class="tabbar__item" data-tab="settings" type="button">
             <span class="tabbar__icon" data-tab-icon="settings" aria-hidden="true"></span>
