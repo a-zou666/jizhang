@@ -19,7 +19,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2.0.0", features = [] }
-tauri-plugin-shell = "2.0.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # 用于发起 HTTP 请求调用大模型 API（json 即可，无需 multipart；语音转写已下线）
@@ -33,6 +32,6 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = 3
+opt-level = "z"   # 体积优先：安装包从 30MB 降到个位数
 panic = "abort"
 strip = true
