@@ -178,8 +178,8 @@
      真正的 iOS 毛玻璃 = 较低不透明度的白底 + 大半径模糊 + 高饱和提升，
      并且背景必须是有层次的彩色渐变（否则白底糊白底，什么都看不见）。
      老 WebView 不支持 backdrop-filter 时有 CSS 降级（见 app.css 末尾）。 */
-  --glass-alpha: 68%;
-  --glass-alpha-strong: 78%;
+  --glass-alpha: 0.72;
+  --glass-alpha-strong: 0.85;
   --glass-blur: 24px;
   --glass-blur-strong: 40px;
   --glass-saturate: 1.8;

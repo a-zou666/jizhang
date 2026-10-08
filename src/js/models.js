@@ -110,6 +110,18 @@ function openProviderEditor(id, onDone) {
   const editing = id ? getProvider(id) : null;
   const current = editing ?? { name: "", protocol: "openai-compatible", baseUrl: "", apiKey: "" };
 
+  // 默认模型直接在服务商表单里选：不用跑到模型列表再设一遍
+  const modelOptions = editing?.models.length
+    ? editing.models
+        .map(
+          (model) =>
+            `<option value="${escapeHtml(model.id)}"${model.id === editing.model ? " selected" : ""}>${
+              model.alias ? `${escapeHtml(model.alias)}（${escapeHtml(model.id)}）` : escapeHtml(model.id)
+            }</option>`,
+        )
+        .join("")
+    : "";
+
   openModal(
     `<p class="modal-title">${editing ? "编辑服务商" : "添加服务商"}</p>
      <div class="field-stack">
@@ -136,6 +148,19 @@ function openProviderEditor(id, onDone) {
          <input class="settings-input" id="pvKey" type="password" spellcheck="false"
                 autocapitalize="off" placeholder="sk-..." />
        </label>
+       ${
+         editing
+           ? `<label class="mm-field">
+                <span class="mm-field__label">默认模型</span>
+                <select class="settings-input" id="pvModel">
+                  ${
+                    modelOptions ||
+                    '<option value="">还没有模型，先在「模型」里添加</option>'
+                  }
+                </select>
+              </label>`
+           : ""
+       }
      </div>
      <div class="modal-actions">
        ${editing ? '<button class="ghost-btn ghost-btn--danger" id="pvDelete" type="button">删除</button>' : ""}
@@ -163,8 +188,9 @@ function openProviderEditor(id, onDone) {
           if (!baseUrl) return toast("请填写 Base URL", "error");
 
           if (editing) {
-            updateProvider(editing.id, { name, protocol, baseUrl, apiKey });
-            // 正在用的这家被改了地址 / Key，当前连接跟着更新
+            const model = panel.querySelector("#pvModel")?.value.trim() ?? editing.model;
+            updateProvider(editing.id, { name, protocol, baseUrl, apiKey, model });
+            // 正在用的这家被改了参数，当前连接跟着更新
             if (getSettings().activeProviderId === editing.id) activateProvider(editing.id);
             toast("已保存", "ok");
           } else {
@@ -357,14 +383,3 @@ export async function fetchModelsInto(providerId, repaint) {
   );
 }
 
-/* ================= 设置页用：当前服务商的模型清单 ================= */
-/** 当前连接可用的模型 id 列表：优先取启用服务商的清单 */
-export function currentModelIds() {
-  const active = getActiveProvider();
-  if (active?.models.length) return active.models.map((item) => item.id);
-  return [];
-}
-
-export function currentProviderName() {
-  return getActiveProvider()?.name ?? "";
-}

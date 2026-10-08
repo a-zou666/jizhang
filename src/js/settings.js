@@ -1,11 +1,9 @@
 /** 十、设置页 */
 
-import { listModels, testConnection } from "./bridge.js";
+import { testConnection } from "./bridge.js";
 import { hydrateIcons } from "./icons.js";
-import { currentModelIds, currentProviderName, fetchModelsInto, openModelManager } from "./models.js";
+import { openModelManager } from "./models.js";
 import {
-  PROTOCOL_ORDER,
-  PROTOCOL_PRESETS,
   addCategory,
   categoryColor,
   clearRecords,
@@ -14,154 +12,38 @@ import {
   getProviders,
   getRecords,
   getSettings,
-  patchConnection,
   removeCategory,
   setSettings,
 } from "./store.js";
 import { closeModal, confirmDialog, openModal, pickOption, promptText, toast } from "./ui.js";
 import { $, dateKey, el, round2, yuan } from "./util.js";
 
-/** 没启用服务商时，拉取到的模型暂时放这里 */
-const fetchedModels = new Map();
-
-/** 模型下拉：来自「模型管理」里该服务商的模型清单；没启用服务商时用临时拉取结果 */
-function syncModelOptions(selectedModel = "") {
-  const select = $("#modelName");
-  const fromProvider = currentModelIds();
-  const models = fromProvider.length
-    ? [...fromProvider]
-    : [...(fetchedModels.get(getSettings().baseUrl) ?? [])];
-  if (selectedModel && !models.includes(selectedModel)) models.unshift(selectedModel);
-  select.replaceChildren(
-    el("option", { value: "", text: models.length ? "请选择模型" : "去模型管理添加" }),
-    ...models.map((id) => el("option", { value: id, text: id })),
-  );
-  select.disabled = models.length === 0;
-  select.value = selectedModel && models.includes(selectedModel) ? selectedModel : "";
-}
-
 /* ---------------- 渲染 ---------------- */
 export function renderSettings() {
   const settings = getSettings();
-  const providers = getProviders();
   const active = getActiveProvider();
 
-  $("#protocolValue").textContent = PROTOCOL_PRESETS[settings.protocol].label;
-  syncInput($("#baseUrl"), settings.baseUrl);
-  syncInput($("#apiKey"), settings.apiKey);
-  syncModelOptions(settings.model);
-
-  $("#modelManagerValue").textContent = providers.length
-    ? active
-      ? `当前：${active.name}`
-      : `${providers.length} 个服务商`
-    : "未添加";
+  // 连接区只有「模型管理」一个入口：服务商、Key、模型全在里面维护，
+  // 这里只显示当前用的是谁，不再重复摆一套协议 / 地址 / Key / 模型
+  $("#modelManagerValue").textContent = active
+    ? `${active.name} · ${settings.model || "未选模型"}`
+    : getProviders().length
+      ? `${getProviders().length} 个服务商（未启用）`
+      : "未添加";
 
   $("#weekStartValue").textContent = settings.weekStart === 0 ? "周日" : "周一";
   $("#budgetValue").textContent = yuan(settings.budget);
   $("#categoryValue").textContent = `${settings.categories.length} 个分类`;
 }
 
-/** 输入框同步：正在编辑的输入框不打断 */
-function syncInput(input, value) {
-  if (document.activeElement === input) return;
-  if (input.value !== value) input.value = value;
-}
-
 /* ---------------- 事件绑定 ---------------- */
 export function bindSettings() {
-  /* 协议类型 */
-  $("#rowProtocol").addEventListener("click", () => {
-    const current = getSettings();
-    pickOption({
-      title: "协议类型",
-      value: current.protocol,
-      options: PROTOCOL_ORDER.map((value) => ({
-        value,
-        title: PROTOCOL_PRESETS[value].label,
-        desc: PROTOCOL_PRESETS[value].desc,
-      })),
-      onPick: (value) => {
-        const preset = PROTOCOL_PRESETS[value];
-        const patch = { protocol: value };
-        const presetUrls = Object.values(PROTOCOL_PRESETS).map((item) => item.baseUrl);
-        if (!current.baseUrl || presetUrls.includes(current.baseUrl)) patch.baseUrl = preset.baseUrl;
-        patchConnection(patch);
-        renderSettings();
-        toast(`已切换为${preset.label}`, "ok");
-      },
-    });
-  });
-
   /* 模型管理 */
   $("#rowModels").addEventListener("click", () => {
     openModelManager(() => renderSettings());
   });
 
-  /* API 参数：改的是「当前连接」，若已启用服务商会同步到那一家 */
-  $("#baseUrl").addEventListener("change", (event) => {
-    patchConnection({ baseUrl: event.target.value.trim() });
-    renderSettings();
-  });
-  $("#modelName").addEventListener("change", (event) => {
-    patchConnection({ model: event.target.value });
-  });
-  $("#apiKey").addEventListener("change", (event) => {
-    patchConnection({ apiKey: event.target.value.trim() });
-  });
-
-  $("#toggleKey").addEventListener("click", () => {
-    const input = $("#apiKey");
-    const hidden = input.type === "password";
-    input.type = hidden ? "text" : "password";
-    $("#toggleKey").textContent = hidden ? "隐藏" : "显示";
-  });
-
-  /* 拉取模型列表 */
-  hydrateIcons($("#fetchModels"));
-  $("#fetchModels").addEventListener("click", fetchModels);
-
-  /* ---------------- 刷新模型 ---------------- */
-  async function fetchModels() {
-    const current = getSettings();
-    const active = getActiveProvider();
-    if (!current.apiKey) return toast("请先填写 API Key", "error");
-    if (!current.baseUrl) return toast("请先填写 Base URL", "error");
-
-    // 已启用服务商：拉取后由用户勾选加入它的模型清单（模型管理里也能进）
-    if (active) {
-      await fetchModelsInto(active.id, () => renderSettings());
-      return;
-    }
-
-    const btn = $("#fetchModels");
-    btn.disabled = true;
-    const loading = toast("正在拉取模型…");
-    try {
-      const result = await listModels(current);
-      const input = $("#modelName");
-
-      if (!result.ok) {
-        toast(result.message || "拉取模型失败", "error");
-        return;
-      }
-      if (!result.models.length) {
-        toast("没有可用的模型", "error");
-        return;
-      }
-      const models = [...new Set(result.models.map((model) => model.trim()).filter(Boolean))];
-      fetchedModels.set(current.baseUrl, models);
-      const selected = models.includes(current.model) ? current.model : models[0];
-      syncModelOptions(selected);
-      patchConnection({ model: selected });
-      toast(`已加载 ${models.length} 个模型`, "ok");
-    } finally {
-      btn.disabled = false;
-      loading.remove();
-    }
-  }
-
-  /* 测试连接 */
+  /* 测试连接：测的是当前启用的服务商 */
   $("#testBtn").addEventListener("click", async () => {
     const current = getSettings();
     const label = $("#testBtnLabel");
@@ -169,7 +51,7 @@ export function bindSettings() {
     const box = $("#testResult");
 
     if (!current.apiKey) {
-      toast("请先填写 API Key", "error");
+      toast("先在「模型管理」里把服务商配好", "error");
       return;
     }
 

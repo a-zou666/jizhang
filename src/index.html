@@ -108,7 +108,7 @@
                 <span class="settings-section__bar" aria-hidden="true"></span>
                 <div class="settings-section__title">
                   <p class="settings-group-label">连接</p>
-                  <p class="settings-section__desc">服务商与模型在「模型管理」里维护，这里只管当前连接</p>                </div>
+                  <p class="settings-section__desc">服务商、Key 与模型都在「模型管理」里维护</p>                </div>
               </header>
               <div class="settings-group settings-group--accent settings-group--glass soft-glass">
                 <button class="settings-row is-button" id="rowModels" type="button" aria-haspopup="dialog">
@@ -117,67 +117,6 @@
                   <span class="settings-row__value" id="modelManagerValue">未添加</span>
                   <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
                 </button>
-
-                <button
-                  class="settings-row is-button"
-                  id="rowProtocol"
-                  type="button"
-                  aria-haspopup="dialog"
-                >
-                  <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
-                  <span class="settings-row__label">协议类型</span>
-                  <span class="settings-row__value" id="protocolValue">OpenAI 兼容</span>
-                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
-                </button>
-
-                <div class="settings-row settings-row--field">
-                  <label class="settings-field__caption" for="baseUrl">
-                    <span class="settings-field__icon" data-icon="chevronRight" aria-hidden="true"></span>
-                    Base URL
-                  </label>
-                  <input
-                    class="settings-input"
-                    id="baseUrl"
-                    type="url"
-                    inputmode="url"
-                    spellcheck="false"
-                    autocapitalize="off"
-                    placeholder="https://api.example.com"
-                  />
-                </div>
-
-                <div class="settings-row settings-row--field">
-                  <label class="settings-field__caption" for="apiKey">
-                    <span class="settings-field__icon" data-icon="sparkles" aria-hidden="true"></span>
-                    API Key
-                  </label>
-                  <div class="settings-input-row">
-                    <input
-                      class="settings-input"
-                      id="apiKey"
-                      type="password"
-                      spellcheck="false"
-                      autocapitalize="off"
-                      placeholder="sk-..."
-                    />
-                    <button class="show-key-btn" id="toggleKey" type="button">显示</button>
-                  </div>
-                </div>
-
-                <div class="settings-row settings-row--field">
-                  <label class="settings-field__caption" for="modelName">
-                    <span class="settings-field__icon" data-icon="chevronRight" aria-hidden="true"></span>
-                    选择模型
-                  </label>
-                  <div class="settings-input-row">
-                    <select class="settings-input" id="modelName" disabled aria-label="选择 API 模型">
-                      <option value="">先拉取可用模型</option>
-                    </select>
-                    <button class="show-key-btn" id="fetchModels" type="button" aria-label="拉取模型" title="拉取模型">
-                      <span data-icon="refresh" aria-hidden="true"></span>
-                    </button>
-                  </div>
-                </div>
 
                 <button class="settings-row is-button settings-row--action" id="testBtn" type="button">
                   <span class="settings-row__icon" data-icon="check" aria-hidden="true"></span>
