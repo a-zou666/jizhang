@@ -1112,6 +1112,43 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   else ok("「清空对话」只清聊天记录，不影响账目");
 }
 
+/* --- 手动编辑必须能删掉：编辑弹窗自带删除 + 二次确认 --- */
+{
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const editor = await import(new URL("../src/js/editor.js", import.meta.url));
+  const panel = documentStub.getElementById("modalPanel");
+  store.replaceAll({ records: [], settings: {} });
+  const saved = store.addRecords([{ date: "2026-10-08", item: "鼠标", category: "数码", amount: 120 }]);
+
+  let deleted = false;
+  editor.openRecordEditor(saved[0], () => {}, { onDelete: () => { deleted = true; } });
+  await settle();
+  const delBtn = panel.querySelector("#edDelete");
+  if (!delBtn) {
+    fail("编辑弹窗没有删除按钮", String(panel.textContent).slice(0, 160));
+  } else ok("编辑弹窗自带「删除」：手动编辑时能直接删掉已添加的记录");
+
+  delBtn.__listeners.get("click")[0]();
+  await settle();
+  const confirmBtn = panel.querySelector("#modalConfirm");
+  if (!confirmBtn || deleted) {
+    fail("删除没走二次确认，或还没确认就已经删了");
+  } else ok("删除走二次确认（显示条目与金额），手滑点错不会立刻删掉");
+
+  confirmBtn.__listeners.get("click")[0]();
+  await settle();
+  if (!deleted) fail("确认后没有执行删除回调");
+  else ok("确认后才真正删除：明细页走 removeRecord，确认页从待入账列表移除");
+
+  editor.openRecordEditor(saved[0], () => {});
+  await settle();
+  if (panel.querySelector("#edDelete")) {
+    fail("没传删除回调时不该显示删除按钮");
+  } else ok("没有删除回调的场合不会显示删除按钮");
+
+  store.replaceAll({ records: [], settings: {} });
+}
+
 /* --- AI 解析必须有超时上限，避免界面一直无反馈 --- */
 if (typeof bridge.AI_TIMEOUT_MS === "number" && bridge.AI_TIMEOUT_MS > 0 && bridge.AI_TIMEOUT_MS <= 60000) {
   ok(`AI 解析有超时上限：${bridge.AI_TIMEOUT_MS / 1000} 秒`);

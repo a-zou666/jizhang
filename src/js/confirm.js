@@ -102,10 +102,22 @@ function renderRow(record) {
 
   const edit = () => {
     haptic(14);
-    openRecordEditor(record, (patch) => {
-      Object.assign(record, patch);
-      renderSheet();
-    });
+    openRecordEditor(
+      record,
+      (patch) => {
+        Object.assign(record, patch);
+        renderSheet();
+      },
+      // 还没入账的条目也能在编辑弹窗里直接去掉
+      {
+        deleteLabel: "从待入账列表移除？",
+        onDelete: () => {
+          pending = pending.filter((item) => item.id !== record.id);
+          renderSheet();
+          if (!pending.length) closeConfirm();
+        },
+      },
+    );
   };
   attachLongPress(main, edit);
   // 轻点只负责收起左滑，编辑走长按（避免滑动结束时误触编辑器）

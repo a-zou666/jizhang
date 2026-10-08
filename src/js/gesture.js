@@ -21,6 +21,7 @@ export function attachSwipeReveal(row, main, { width = 76, openClass = "is-open"
   let dx = 0;
   let tracking = false;
   let moved = false;
+  let dragged = false;
 
   const isOpen = () => row.classList.contains(openClass);
 
@@ -28,6 +29,12 @@ export function attachSwipeReveal(row, main, { width = 76, openClass = "is-open"
     node: row,
     close: () => setOpen(false),
     isOpen,
+    /** 刚刚是不是拖过：点击处理器用它避免把拖拽的抬手当成点击 */
+    consumeDrag: () => {
+      const value = dragged;
+      dragged = false;
+      return value;
+    },
   };
 
   function setOpen(open) {
@@ -46,6 +53,7 @@ export function attachSwipeReveal(row, main, { width = 76, openClass = "is-open"
     startY = event.clientY;
     dx = 0;
     moved = false;
+    dragged = false;
     tracking = true;
   });
 
@@ -69,6 +77,7 @@ export function attachSwipeReveal(row, main, { width = 76, openClass = "is-open"
     if (!tracking) return;
     tracking = false;
     main.style.transform = "";
+    if (moved) dragged = true;
     if (!moved) return;
     const opened = isOpen();
     setOpen(dx < -30 ? true : dx > 30 ? false : opened);

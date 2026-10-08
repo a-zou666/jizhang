@@ -1,16 +1,18 @@
 /** 单条记录编辑弹窗（确认页与明细列表共用） */
 
 import { categoryColor, getSettings } from "./store.js";
-import { closeModal, openModal, toast } from "./ui.js";
-import { escapeHtml, fromKey, round2 } from "./util.js";
+import { closeModal, confirmDialog, openModal, toast } from "./ui.js";
+import { escapeHtml, formatMoney, fromKey, round2 } from "./util.js";
 
 /**
  * @param {{ item: string, amount: number, date: string, category: string }} record
  * @param {(patch: {item: string, amount: number, date: string, category: string}) => void} onSave
+ * @param {{ onDelete?: () => void, deleteLabel?: string }} [options] 传了 onDelete 才显示删除按钮
  */
-export function openRecordEditor(record, onSave) {
+export function openRecordEditor(record, onSave, options = {}) {
   const { categories } = getSettings();
   const current = categories.includes(record.category) ? record.category : categories[0];
+  const onDelete = typeof options.onDelete === "function" ? options.onDelete : null;
 
   const chips = categories
     .map(
@@ -38,6 +40,7 @@ export function openRecordEditor(record, onSave) {
        <div class="chip-row" id="edCats">${chips}</div>
      </div>
      <div class="modal-actions">
+       ${onDelete ? '<button class="ghost-btn ghost-btn--danger" id="edDelete" type="button">删除</button>' : ""}
        <button class="ghost-btn" id="edCancel" type="button">取消</button>
        <button class="primary-btn primary-btn--compact" id="edSave" type="button">保存</button>
      </div>`,
@@ -54,6 +57,24 @@ export function openRecordEditor(record, onSave) {
         });
 
         panel.querySelector("#edCancel").addEventListener("click", closeModal);
+
+        if (onDelete) {
+          panel.querySelector("#edDelete").addEventListener("click", () => {
+            const label = `${record.item || "这条记录"} ¥${formatMoney(record.amount)}`;
+            closeModal();
+            confirmDialog({
+              title: options.deleteLabel ?? "删除这条记录？",
+              message: label,
+              confirmLabel: "删除",
+              danger: true,
+              onConfirm: () => {
+                onDelete();
+                toast("已删除");
+              },
+            });
+          });
+        }
+
         panel.querySelector("#edSave").addEventListener("click", () => {
           const item = panel.querySelector("#edItem").value.trim();
           const amount = round2(Math.abs(Number(panel.querySelector("#edAmount").value)));

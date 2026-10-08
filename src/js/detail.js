@@ -56,13 +56,36 @@ function renderRow(record) {
 
   row.append(main, remove);
 
-  attachSwipeReveal(row, main);
-  attachLongPress(main, () => {
+  const swipe = attachSwipeReveal(row, main);
+
+  const openEditor = () => {
     haptic(14);
-    openRecordEditor(record, (patch) => {
-      updateRecord(record.id, patch);
-      haptic();
-    });
+    openRecordEditor(
+      record,
+      (patch) => {
+        updateRecord(record.id, patch);
+        haptic();
+      },
+      // 编辑弹窗里就能删掉：不用非得靠左滑
+      { onDelete: () => removeRecord(record.id) },
+    );
+  };
+
+  // 长按进编辑（手指没离开就有反馈）
+  let longPressed = false;
+  attachLongPress(main, () => {
+    longPressed = true;
+    window.setTimeout(() => {
+      longPressed = false;
+    }, 600);
+    openEditor();
+  });
+
+  // 轻点也进编辑：左滑已展开时先收起，刚拖过就不算点击
+  main.addEventListener("click", () => {
+    if (longPressed || swipe.consumeDrag()) return;
+    if (swipe.isOpen()) return swipe.close();
+    openEditor();
   });
 
   return row;
