@@ -420,6 +420,22 @@ if (appCss.includes("position: fixed;\n  bottom: calc(var(--tabbar-height)")) {
   fail("底部输入条仍是 fixed 悬浮（未收进停靠区）");
 } else ok("底部输入条已从 fixed 悬浮改为停靠区布局");
 
+/* --- 手机刘海安全区：顶部三个 header 留白、底部不双重计算 --- */
+{
+  const headers = [".home-header", ".settings-header", ".chat-header"];
+  const missing = headers.filter((sel) => {
+    const blockMatch = appCss.match(new RegExp(`${sel.replace("-", "\\-")}\\s*\\{[^}]*\\}`));
+    return !blockMatch || !blockMatch[0].includes("var(--safe-area-top)");
+  });
+  if (missing.length) fail("以下 header 没有给状态栏/刘海留白", missing.join(", "));
+  else ok("三个页面的 header 都加了 safe-area-top 留白（内容不再顶进刘海）");
+
+  const bodyBlock = appCss.match(/\.page-body\s*\{[^}]*\}/);
+  if (bodyBlock && bodyBlock[0].includes("safe-area-bottom")) {
+    fail("page-body 仍在叠加 safe-area-bottom（tabbar 高度里已含，会双重留白）");
+  } else ok("page-body 底部不再叠加 safe-area-bottom（去掉旧输入条的双倍高度）");
+}
+
 /* --- CSS 变量契约：app.css 引用的变量必须有人定义 --- */
 // 先剥掉注释：注释里写 var(--foo) 当举例说明时，不该被当成真实引用
 const stripCssComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, " ");

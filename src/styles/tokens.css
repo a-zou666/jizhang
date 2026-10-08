@@ -158,8 +158,8 @@
   /* ============ 布局常量 ============ */
   --header-height: 3.5rem;
   --tabbar-height: 3.5rem;
-  --composer-height: 3.5rem;
-  --dock-height: calc(var(--composer-height) + var(--tabbar-height));
+  /* 输入条已改为独立对话页，底部停靠区只剩导航栏 */
+  --dock-height: var(--tabbar-height);
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
