@@ -2262,3 +2262,14 @@ a {
 #page-chat {
   overflow: hidden;
 }
+
+/* 导入备份时粘贴 JSON 的多行输入 */
+.settings-textarea {
+  min-height: 8rem;
+  max-height: 36vh;
+  resize: none;
+  padding: var(--space-3) var(--space-4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}

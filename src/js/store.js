@@ -635,6 +635,61 @@ export function exportPayload() {
   };
 }
 
+/** 导入备份：mode="replace" 覆盖恢复，mode="merge" 追加合并 */
+export function importBackup(raw, { mode = "replace" } = {}) {
+  const incoming = Array.isArray(raw?.records)
+    ? raw.records.map(sanitizeRecord).filter(Boolean)
+    : [];
+  if (!incoming.length) return { ok: false, reason: "备份里没有可导入的账目" };
+
+  // 备份里的 API Key 是导出时脱敏的 ***，不能拿它覆盖本机真实凭据
+  const settings = mergeImportedSettings(raw?.settings);
+
+  if (mode === "replace") {
+    state.records = sortRecords(incoming);
+    state.chat = sanitizeChat(raw?.chat);
+    state.settings = settings;
+    commit("all");
+    return { ok: true, mode, added: incoming.length, total: incoming.length };
+  }
+
+  const ids = new Set(state.records.map((record) => record.id));
+  const fingerprints = new Set(state.records.map(fingerprint));
+  const fresh = incoming.filter(
+    (record) => !ids.has(record.id) && !fingerprints.has(fingerprint(record)),
+  );
+  for (const record of fresh) fingerprints.add(fingerprint(record));
+
+  state.records = sortRecords(state.records.concat(fresh));
+  state.settings = settings;
+  commit("all");
+  return {
+    ok: true,
+    mode,
+    added: fresh.length,
+    skipped: incoming.length - fresh.length,
+    total: state.records.length,
+  };
+}
+
+/** 同一笔账的指纹：日期 + 物品 + 金额相同就视为重复 */
+const fingerprint = (record) => `${record.date}|${record.item}|${record.amount}`;
+
+const sortRecords = (list) =>
+  [...list].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt - b.createdAt));
+
+/** 导入的设置：脱敏的 Key 保留本机值，其余按校验规则收口 */
+function mergeImportedSettings(raw) {
+  const base = sanitizeSettings(raw, state.settings);
+  const keepSecret = (incoming, current) =>
+    !incoming || incoming === "***" ? current : incoming;
+  const providers = (base.providers ?? []).map((provider) => {
+    const mine = state.settings.providers.find((item) => item.id === provider.id);
+    return mine ? { ...provider, apiKey: keepSecret(provider.apiKey, mine.apiKey) } : provider;
+  });
+  return { ...base, apiKey: keepSecret(base.apiKey, state.settings.apiKey), providers };
+}
+
 export function replaceAll(next) {
   const fresh = DEFAULT_STATE();
   if (Array.isArray(next?.records)) fresh.records = next.records.map(sanitizeRecord).filter(Boolean);

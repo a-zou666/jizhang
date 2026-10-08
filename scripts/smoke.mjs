@@ -1165,6 +1165,57 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.replaceAll({ records: [], settings: {} });
 }
 
+/* --- 数据导入：备份恢复（合并 / 覆盖），且不弄丢本机 API Key --- */
+{
+  store.replaceAll({ records: [], settings: { apiKey: "sk-local-real" } });
+  const provider = store.addProvider({
+    name: "本机服务商",
+    baseUrl: "https://local.test",
+    apiKey: "sk-provider-real",
+  });
+  store.addRecords([{ date: "2026-10-01", item: "房租", category: "居住", amount: 2000 }]);
+
+  // 导出再导入，等于一次备份恢复
+  const backup = JSON.parse(JSON.stringify(store.exportPayload()));
+  if (backup.settings.apiKey !== "***" || backup.settings.providers[0].apiKey !== "***") {
+    fail("导出没有脱敏，导入测试的前提不成立");
+  } else ok("备份里的 API Key 是 ***（脱敏状态）");
+
+  // 覆盖恢复
+  const replaced = store.importBackup(backup, { mode: "replace" });
+  if (!replaced.ok || store.getRecords().length !== 1) {
+    fail("覆盖恢复失败", JSON.stringify(replaced));
+  } else ok("覆盖恢复：账目被备份内容替换");
+
+  if (store.getSettings().apiKey !== "sk-local-real" || store.getSettings().providers[0].apiKey !== "sk-provider-real") {
+    fail("导入把脱敏的 *** 写回了本机 Key", JSON.stringify({ ...store.getSettings(), providers: undefined }));
+  } else ok("导入不会用 *** 覆盖本机真实 API Key（连接仍然可用）");
+
+  // 合并：同一笔不重复进
+  const again = store.importBackup(backup, { mode: "merge" });
+  if (again.added !== 0 || store.getRecords().length !== 1) {
+    fail("合并导入把同一笔账重复加进来了", JSON.stringify(again));
+  } else ok("合并导入：已存在的账目不会重复添加");
+
+  // 合并：新账目补进来
+  backup.records.push({ id: "imported-1", date: "2026-10-02", item: "咖啡", category: "餐饮", amount: 32 });
+  const merged = store.importBackup(backup, { mode: "merge" });
+  if (merged.added !== 1 || store.getRecords().length !== 2) {
+    fail("合并导入没有追加新账目", JSON.stringify(merged));
+  } else ok("合并导入：只补进备份里新增的那 1 笔，当前数据不受影响");
+
+  // 脏备份
+  if (store.importBackup({ records: [] }, { mode: "merge" }).ok) {
+    fail("空备份不该被当作导入成功");
+  } else ok("没有账目的备份会被拒绝并给出原因");
+
+  if (!indexSource.includes('id="rowImport"') || !/id="rowExport"/.test(indexSource)) {
+    fail("设置页缺少数据导入 / 导出入口");
+  } else ok("设置页「数据」区同时有导出与导入两个入口");
+
+  store.replaceAll({ records: [], settings: {} });
+}
+
 /* --- AI 解析必须有超时上限，避免界面一直无反馈 --- */
 if (typeof bridge.AI_TIMEOUT_MS === "number" && bridge.AI_TIMEOUT_MS > 0 && bridge.AI_TIMEOUT_MS <= 60000) {
   ok(`AI 解析有超时上限：${bridge.AI_TIMEOUT_MS / 1000} 秒`);

@@ -11,6 +11,7 @@ import {
   getActiveProvider,
   getProviders,
   getRecords,
+  importBackup,
   getSettings,
   removeCategory,
   setSettings,
@@ -108,8 +109,9 @@ export function bindSettings() {
   /* 分类管理 */
   $("#rowCategories").addEventListener("click", openCategoryManager);
 
-  /* 数据导出 */
+  /* 数据导出 / 导入 */
   $("#rowExport").addEventListener("click", exportData);
+  $("#rowImport").addEventListener("click", importData);
 
   /* 清空账单 */
   $("#rowClear").addEventListener("click", () => {
@@ -224,6 +226,104 @@ function exportData() {
       }
       download(`ai-ledger-${stamp}.json`, JSON.stringify(payload, null, 2), "application/json");
       toast("已导出 JSON", "ok");
+    },
+  });
+}
+
+/* ---------------- 数据导入（备份恢复） ---------------- */
+function importData() {
+  pickOption({
+    title: "数据来源",
+    value: "file",
+    options: [
+      { value: "file", title: "从备份文件导入", desc: "选择之前导出的 .json 备份" },
+      { value: "paste", title: "粘贴备份内容", desc: "把复制好的 JSON 粘进来" },
+    ],
+    onPick: (value) => {
+      if (value === "paste") openPasteImport();
+      else pickBackupFile();
+    },
+  });
+}
+
+function pickBackupFile() {
+  const input = el("input", { type: "file", accept: "application/json,.json,.txt" });
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    file
+      .text()
+      .then((text) => confirmImport(text))
+      .catch(() => toast("读取文件失败，试试粘贴方式", "error"));
+  });
+  input.click();
+}
+
+function openPasteImport() {
+  openModal(
+    `<p class="modal-title">粘贴备份内容</p>
+     <p class="t-footnote" style="text-align:center;color:var(--text-tertiary)">把导出的 JSON 全文粘贴进来</p>
+     <textarea class="settings-input settings-textarea" id="impText" rows="8"
+               spellcheck="false" placeholder='{"app":"ai-ledger","records":[...]}'></textarea>
+     <div class="modal-actions">
+       <button class="ghost-btn" id="impCancel" type="button">取消</button>
+       <button class="primary-btn primary-btn--compact" id="impNext" type="button">下一步</button>
+     </div>`,
+    {
+      onMount: (panel) => {
+        panel.querySelector("#impCancel").addEventListener("click", closeModal);
+        panel.querySelector("#impNext").addEventListener("click", () => {
+          const text = panel.querySelector("#impText").value;
+          closeModal();
+          confirmImport(text);
+        });
+        panel.querySelector("#impText").focus();
+      },
+    },
+  );
+}
+
+/** 解析备份文本，让用户选「合并」还是「覆盖恢复」 */
+function confirmImport(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return toast("没有读到备份内容", "error");
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return toast("不是有效的 JSON 备份", "error");
+  }
+  if (!parsed || typeof parsed !== "object") return toast("备份格式不对", "error");
+
+  const count = Array.isArray(parsed.records) ? parsed.records.length : 0;
+  if (!count) return toast("这份备份里没有账目记录", "error");
+
+  const apply = (mode) => {
+    const result = importBackup(parsed, { mode });
+    if (!result.ok) return toast(result.reason, "error");
+    if (mode === "replace") toast(`已恢复 ${result.total} 笔账目`, "ok");
+    else if (!result.added) toast("这些账目已经都在了，无需重复导入", "ok");
+    else toast(`已导入 ${result.added} 笔，现有 ${result.total} 笔`, "ok");
+  };
+
+  pickOption({
+    title: `导入 ${count} 笔账目`,
+    value: "merge",
+    options: [
+      { value: "merge", title: "合并到现有账目", desc: "保留当前数据，只补进不重复的" },
+      { value: "replace", title: "覆盖恢复", desc: "用备份替换当前全部账目与设置" },
+    ],
+    onPick: (mode) => {
+      if (mode !== "replace") return apply("merge");
+      const current = getRecords().length;
+      confirmDialog({
+        title: "覆盖当前数据？",
+        message: `当前 ${current} 笔账目会被备份的 ${count} 笔替换，无法撤销。`,
+        confirmLabel: "覆盖恢复",
+        danger: true,
+        onConfirm: () => apply("replace"),
+      });
     },
   });
 }

@@ -73,6 +73,10 @@ export const ICONS = {
     <path d="M12 3.5v9.5" ${STROKE} />
     <path d="M7.5 12.5 12 17l4.5-4.5" ${STROKE} />
     <path d="M4 16.8v1.7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.7" ${STROKE} />`,
+  upload: `
+    <path d="M12 17V7.5" ${STROKE} />
+    <path d="M7.5 12 12 7.5 16.5 12" ${STROKE} />
+    <path d="M4 16.8v1.7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.7" ${STROKE} />`,
 };
 
 /** 取图标的 <svg> 外层包裹 */
