@@ -27,33 +27,19 @@
 
 ## 界面截图
 
-真机（Android）：
+下面每张都是 `node scripts/screenshots.mjs` 真实跑 App 截出来的（无头 Chromium，390×844 手机视口），不是设计稿。
 
-<p>
-  <img src="docs/screenshots/device-01.png" width="24%" alt="真机截图 1" />
-  <img src="docs/screenshots/device-02.png" width="24%" alt="真机截图 2" />
-  <img src="docs/screenshots/device-03.png" width="24%" alt="真机截图 3" />
-  <img src="docs/screenshots/device-04.png" width="24%" alt="真机截图 4" />
-</p>
-<p>
-  <img src="docs/screenshots/device-05.jpg" width="24%" alt="真机截图 5" />
-  <img src="docs/screenshots/device-06.png" width="24%" alt="真机截图 6" />
-</p>
+| 首页 · 日历记账 | 对话页 · AI 记账 | 设置页 |
+| --- | --- | --- |
+| ![首页](docs/screenshots/home.png) | ![对话页](docs/screenshots/chat.png) | ![设置页](docs/screenshots/settings.png) |
 
-桌面预览（浏览器里跑的同一套界面）：
+| 对话里的账目卡片 | 记一笔 | 编辑 / 删除 |
+| --- | --- | --- |
+| ![账目卡片](docs/screenshots/chat-card.png) | ![记一笔](docs/screenshots/quick-add.png) | ![编辑记录](docs/screenshots/edit-record.png) |
 
-<p>
-  <img src="docs/screenshots/preview-01.png" width="30%" alt="预览截图 1" />
-  <img src="docs/screenshots/preview-02.png" width="30%" alt="预览截图 2" />
-  <img src="docs/screenshots/preview-03.png" width="30%" alt="预览截图 3" />
-</p>
-<p>
-  <img src="docs/screenshots/preview-04.png" width="30%" alt="预览截图 4" />
-  <img src="docs/screenshots/preview-05.png" width="30%" alt="预览截图 5" />
-  <img src="docs/screenshots/preview-06.png" width="30%" alt="预览截图 6" />
-</p>
-
-全部截图在 `docs/screenshots/`。
+| 模型管理 | 服务商的模型列表 |
+| --- | --- |
+| ![模型管理](docs/screenshots/model-manager.png) | ![模型列表](docs/screenshots/model-list.png) |
 
 ## 下载
 
@@ -84,6 +70,7 @@ npm install        # 安装依赖
 npm run dev        # Vite 开发服务器
 npm run check      # 语法 + 单测 + 冒烟测试
 npm run preview    # 浏览器预览（无需 Rust，走本地兜底解析）
+npm run screenshots  # 真实渲染并截取各页面（需先起 preview，且本地装过 chromium）
 npm run tauri dev  # 桌面端调试（需 Rust 工具链）
 ```
 
