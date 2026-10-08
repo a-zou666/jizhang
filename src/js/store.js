@@ -39,6 +39,8 @@ const DEFAULT_STATE = () => ({
     model: "",
     weekStart: 1,
     budget: 5000,
+    // 单月预算：{ "YYYY-MM": 金额 }，没单独设置的月份沿用 budget
+    budgets: {},
     categories: [...DEFAULT_CATEGORIES],
     // 模型管理：服务商列表 + 当前启用的服务商 id
     // providers: [{ id, name, protocol, baseUrl, apiKey, model, models: [{ id, alias }] }]
@@ -121,6 +123,7 @@ function sanitizeSettings(raw, base) {
     model: String(raw.model ?? "").trim(),
     weekStart: Number(raw.weekStart) === 0 ? 0 : 1,
     budget: Number.isFinite(budget) ? Math.max(0, round2(budget)) : base.budget,
+    budgets: sanitizeBudgets(raw.budgets),
     categories: categories.length ? categories : [...base.categories],
     providers: sanitizeProviders(raw.providers),
     // 指向了不存在的服务商就当成「没有启用任何服务商」
@@ -144,6 +147,20 @@ function sanitizeModels(raw) {
     out.push({ id, alias: String(value.alias ?? "").trim().slice(0, 60) });
   }
   return out.slice(0, 300);
+}
+
+/** 单月预算的键必须是 YYYY-MM，金额非负，最多存 240 个月（20 年） */
+function sanitizeBudgets(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)) continue;
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0) continue;
+    out[key] = round2(amount);
+    if (Object.keys(out).length >= 240) break;
+  }
+  return out;
 }
 
 /**
@@ -352,6 +369,42 @@ export function setSettings(patch) {
   const next = { ...state.settings, ...patch };
   state.settings = next;
   commit("settings");
+}
+
+/* ---------------- 预算：默认月预算 + 单月覆盖 ---------------- */
+const monthKeyOf = (dateOrKey) =>
+  typeof dateOrKey === "string" ? dateOrKey : monthKey(dateOrKey);
+
+/** 某个月生效的预算：这个月单独设过就用它的，否则沿用默认月预算 */
+export function getMonthBudget(dateOrKey) {
+  const own = state.settings.budgets?.[monthKeyOf(dateOrKey)];
+  return typeof own === "number" ? own : Math.max(0, Number(state.settings.budget) || 0);
+}
+
+/** 这个月是不是单独设过（用于界面上提示「本月已单独设置」） */
+export function hasOwnMonthBudget(dateOrKey) {
+  return typeof state.settings.budgets?.[monthKeyOf(dateOrKey)] === "number";
+}
+
+export function setMonthBudget(dateOrKey, value) {
+  const key = monthKeyOf(dateOrKey);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)) return false;
+  const amount = round2(Number(value));
+  if (!Number.isFinite(amount) || amount < 0) return false;
+  state.settings = { ...state.settings, budgets: { ...(state.settings.budgets ?? {}), [key]: amount } };
+  commit("settings");
+  return true;
+}
+
+/** 恢复成默认月预算 */
+export function resetMonthBudget(dateOrKey) {
+  const key = monthKeyOf(dateOrKey);
+  if (!state.settings.budgets?.[key]) return false;
+  const budgets = { ...state.settings.budgets };
+  delete budgets[key];
+  state.settings = { ...state.settings, budgets };
+  commit("settings");
+  return true;
 }
 
 /* ---------------- 模型管理：服务商 + 模型 ---------------- */

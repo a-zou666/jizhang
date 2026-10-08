@@ -4,7 +4,7 @@ import { bindCalendarNav, bindCalendarSwipe } from "./calendar.js";
 import { bindComposer } from "./composer.js";
 import { bindConfirmSheet } from "./confirm.js";
 import { closeOpenRows } from "./gesture.js";
-import { openMonthPicker, renderHome } from "./home.js";
+import { openBudgetEditor, openMonthPicker, renderHome } from "./home.js";
 import { hydrateIcons, navIcon } from "./icons.js";
 import { bindSettings, renderSettings } from "./settings.js";
 import { load, onStorageError, subscribe } from "./store.js";
@@ -71,6 +71,9 @@ function bindChrome() {
       openMonthPicker();
     }
   });
+
+  // 当月预算就填在首页「本月支出」旁边：翻到哪个月，改的就是哪个月
+  $("#monthBudgetBtn").addEventListener("click", openBudgetEditor);
 
   for (const item of $$(".tabbar__item")) {
     item.addEventListener("click", () => switchTab(item.dataset.tab));

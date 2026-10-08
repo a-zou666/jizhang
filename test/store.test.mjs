@@ -135,6 +135,50 @@ describe("当前连接改动只同步到已启用的那一家", () => {
   });
 });
 
+describe("预算：默认月预算 + 单月覆盖", () => {
+  const october = new Date(2026, 9, 1);
+  const november = new Date(2026, 10, 1);
+
+  it("没单独设置的月份沿用默认月预算", () => {
+    mod.patchConnection({}); // 无操作，确保状态干净
+    mod.setSettings({ budget: 3000 });
+    assert.equal(mod.getMonthBudget(october), 3000);
+    assert.equal(mod.hasOwnMonthBudget(october), false);
+  });
+
+  it("某个月单独设预算后，只有那个月变", () => {
+    mod.setSettings({ budget: 3000 });
+    assert.equal(mod.setMonthBudget(october, 1800), true);
+    assert.equal(mod.getMonthBudget(october), 1800);
+    assert.equal(mod.getMonthBudget(november), 3000);
+    assert.equal(mod.hasOwnMonthBudget(october), true);
+  });
+
+  it("恢复默认后回到全局预算", () => {
+    mod.setSettings({ budget: 3000 });
+    mod.setMonthBudget(october, 1800);
+    assert.equal(mod.resetMonthBudget(october), true);
+    assert.equal(mod.getMonthBudget(october), 3000);
+    assert.equal(mod.resetMonthBudget(october), false);
+  });
+
+  it("拒绝非法月份键与负数金额", () => {
+    assert.equal(mod.setMonthBudget("2026-13", 100), false);
+    assert.equal(mod.setMonthBudget("不是月份", 100), false);
+    assert.equal(mod.setMonthBudget(october, -50), false);
+    assert.deepEqual(mod.getSettings().budgets, {});
+  });
+
+  it("导入的预算数据被清洗", () => {
+    mod.replaceAll({
+      records: [],
+      settings: { budget: 2000, budgets: { "2026-10": 1500, "2026-02-30": 900, bad: 100, "2027-01": -5 } },
+    });
+    assert.deepEqual(mod.getSettings().budgets, { "2026-10": 1500 });
+    assert.equal(mod.getMonthBudget(october), 1500);
+  });
+});
+
 describe("导入 / 导出的收口", () => {
   it("导入的非法服务商被清洗，失效的启用 id 复位", () => {
     mod.replaceAll({

@@ -38,7 +38,16 @@
               </div>
               <p class="spend-overview__amount">
                 <span class="spend-overview__spent t-numeric" id="monthSpent">¥0</span>
-                <span class="spend-overview__budget t-numeric" id="monthBudget">/ ¥5,000</span>
+                <button
+                  class="spend-overview__budget t-numeric"
+                  id="monthBudgetBtn"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-label="设置本月预算"
+                >
+                  <span id="monthBudget">/ ¥5,000</span>
+                  <span class="spend-overview__cta" id="monthBudgetCta">改</span>
+                </button>
               </p>
               <div
                 class="spend-overview__track"
@@ -132,7 +141,7 @@
                 <span class="settings-section__bar" aria-hidden="true"></span>
                 <div class="settings-section__title">
                   <p class="settings-group-label">偏好</p>
-                  <p class="settings-section__desc">按你的习惯调整日期、预算与分类</p>
+                  <p class="settings-section__desc">默认预算对每个月生效；某个月不同就在首页本月支出那里改</p>
                 </div>
               </header>
               <div class="settings-group settings-group--glass">
@@ -144,7 +153,7 @@
                 </button>
                 <button class="settings-row is-button" id="rowBudget" type="button">
                   <span class="settings-row__icon" data-icon="sparkles" aria-hidden="true"></span>
-                  <span class="settings-row__label">月预算</span>
+                  <span class="settings-row__label">默认月预算</span>
                   <span class="settings-row__value t-numeric" id="budgetValue">¥5,000</span>
                   <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
                 </button>

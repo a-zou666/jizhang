@@ -1042,6 +1042,37 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.replaceAll({ records: [], settings: {} });
 }
 
+/* --- 当月预算：填在首页「本月支出」旁边，按月覆盖默认预算 --- */
+{
+  store.replaceAll({ records: [], settings: { budget: 2000 } });
+  const oct = new Date(2026, 9, 1);
+  const nov = new Date(2026, 10, 1);
+
+  if (store.getMonthBudget(oct) !== 2000) {
+    fail("默认月预算没生效", String(store.getMonthBudget(oct)));
+  } else ok("没单独设置的月份沿用默认月预算");
+
+  store.setMonthBudget(oct, 1500);
+  if (store.getMonthBudget(oct) !== 1500 || store.getMonthBudget(nov) !== 2000) {
+    fail("单月预算覆盖了别的月份", JSON.stringify({ oct: store.getMonthBudget(oct), nov: store.getMonthBudget(nov) }));
+  } else ok("给某个月单独设预算：只有那一个月变，其他月份不变");
+
+  store.resetMonthBudget(oct);
+  if (store.getMonthBudget(oct) !== 2000) {
+    fail("恢复默认后没回到全局预算", String(store.getMonthBudget(oct)));
+  } else ok("「恢复默认」让该月回到全局预算");
+
+  if (store.setMonthBudget("2026-13", 100) !== false || store.setMonthBudget(oct, -1) !== false) {
+    fail("非法月份 / 负数预算没有被拒绝", JSON.stringify(store.getSettings().budgets));
+  } else ok("非法月份键与负数预算被拒绝");
+
+  if (!indexSource.includes('id="monthBudgetBtn"') || !/spend-overview__amount/.test(indexSource)) {
+    fail("首页没有当月预算入口", "缺少 monthBudgetBtn");
+  } else ok("当月预算入口就在首页「本月支出」旁边：翻到哪个月，改的就是哪个月");
+
+  store.replaceAll({ records: [], settings: {} });
+}
+
 /* --- AI 解析必须有超时上限，避免界面一直无反馈 --- */
 if (typeof bridge.AI_TIMEOUT_MS === "number" && bridge.AI_TIMEOUT_MS > 0 && bridge.AI_TIMEOUT_MS <= 60000) {
   ok(`AI 解析有超时上限：${bridge.AI_TIMEOUT_MS / 1000} 秒`);

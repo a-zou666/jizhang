@@ -412,8 +412,34 @@ a {
 }
 
 .spend-overview__budget {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 4px;
+  margin-left: var(--space-1);
   font-size: var(--text-sm);
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.82);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.spend-overview__budget:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.spend-overview__budget:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 1px;
+}
+
+.spend-overview__cta {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: var(--text-xs);
+  line-height: 1.6;
 }
 
 .spend-overview__track {

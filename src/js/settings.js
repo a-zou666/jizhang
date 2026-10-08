@@ -92,7 +92,7 @@ export function bindSettings() {
   /* 月预算 */
   $("#rowBudget").addEventListener("click", () => {
     promptText({
-      title: "月预算",
+      title: "默认月预算",
       value: String(getSettings().budget),
       placeholder: "5000",
       inputMode: "decimal",
