@@ -477,6 +477,7 @@ async fn process_accounting(
         &api_model,
         &system_prompt,
         trimmed,
+        None, // 纯文本记账，不带图片
     )
     .await?;
 
