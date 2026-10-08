@@ -25,6 +25,36 @@
 - **模型管理**：可添加多个服务商（Claude / OpenAI / OpenAI 兼容），各自维护模型列表，手动添加或拉取后勾选，随时切换启用
 - **数据导出 / 导入**：JSON / CSV 导出，导入时可选「合并」或「覆盖恢复」；备份里的 API Key 一律脱敏，导入不会覆盖本机真实凭据
 
+## 界面截图
+
+真机（Android）：
+
+<p>
+  <img src="docs/screenshots/device-01.png" width="24%" alt="真机截图 1" />
+  <img src="docs/screenshots/device-02.png" width="24%" alt="真机截图 2" />
+  <img src="docs/screenshots/device-03.png" width="24%" alt="真机截图 3" />
+  <img src="docs/screenshots/device-04.png" width="24%" alt="真机截图 4" />
+</p>
+<p>
+  <img src="docs/screenshots/device-05.jpg" width="24%" alt="真机截图 5" />
+  <img src="docs/screenshots/device-06.png" width="24%" alt="真机截图 6" />
+</p>
+
+桌面预览（浏览器里跑的同一套界面）：
+
+<p>
+  <img src="docs/screenshots/preview-01.png" width="30%" alt="预览截图 1" />
+  <img src="docs/screenshots/preview-02.png" width="30%" alt="预览截图 2" />
+  <img src="docs/screenshots/preview-03.png" width="30%" alt="预览截图 3" />
+</p>
+<p>
+  <img src="docs/screenshots/preview-04.png" width="30%" alt="预览截图 4" />
+  <img src="docs/screenshots/preview-05.png" width="30%" alt="预览截图 5" />
+  <img src="docs/screenshots/preview-06.png" width="30%" alt="预览截图 6" />
+</p>
+
+全部截图在 `docs/screenshots/`。
+
 ## 下载
 
 Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://github.com/a-zou666/jizhang/releases)，push 到 `main` 即触发。
