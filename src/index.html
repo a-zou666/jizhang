@@ -87,7 +87,12 @@
             <section class="panel detail-panel glass-sheen soft-glass">
               <header class="panel__head">
                 <h2 class="panel__title t-title3" id="detailTitle">今日明细</h2>
-                <span class="panel__count t-footnote" id="detailCount"></span>
+                <div class="panel__head-right">
+                  <span class="panel__count t-footnote" id="detailCount"></span>
+                  <button class="detail-add" id="fabAdd" type="button">
+                    <span data-icon="plus" aria-hidden="true"></span>记一笔
+                  </button>
+                </div>
               </header>
               <ul class="detail-list" id="detailList"></ul>
               <div class="detail-total">
@@ -95,9 +100,6 @@
                 <span class="detail-total__value t-numeric" id="detailTotal">¥0</span>
               </div>
             </section>
-            <button class="fab" id="fabAdd" type="button" aria-label="记一笔">
-              <span data-icon="plus" aria-hidden="true"></span>
-            </button>
           </div>
         </section>
 

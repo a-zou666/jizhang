@@ -77,7 +77,7 @@ function bindChrome() {
   // 当月预算就填在首页「本月支出」旁边：翻到哪个月，改的就是哪个月
   $("#monthBudgetBtn").addEventListener("click", openBudgetEditor);
 
-  // 底部输入条已换成独立的对话页：首页只留一个「记一笔」的悬浮按钮
+  // 「记一笔」就在今日明细的标题右侧
   $("#fabAdd").addEventListener("click", openQuickAdd);
 
   for (const item of $$(".tabbar__item")) {
