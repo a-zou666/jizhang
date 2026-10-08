@@ -1082,10 +1082,15 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("服务商预设不齐", `缺少 ${missing.join("/")}`);
   } else ok(`服务商预设齐了 ${presets.length} 家：${names.join(" · ")}`);
 
-  const ark = presets.find((item) => item.name === "豆包（兼容入口）");
-  if (!ark || ark.baseUrl !== "https://ark.cn-beijing.volces.com/api/compatible") {
-    fail("方舟兼容入口地址不对", ark?.baseUrl);
-  } else ok("方舟兼容入口可直接填 https://ark.cn-beijing.volces.com/api/compatible");
+  const ark = presets.find((item) => item.name === "豆包（火山方舟）");
+  if (!ark || ark.baseUrl !== "https://ark.cn-beijing.volces.com/api/v3") {
+    fail("豆包火山方舟预设地址不对", ark?.baseUrl);
+  } else ok("豆包火山方舟预设地址正确：ark.cn-beijing.volces.com/api/v3（OpenAI 兼容）");
+
+  const bad = presets.find((item) => item.baseUrl?.includes("/api/compatible"));
+  if (bad) {
+    fail("不应该预置 Anthropic 兼容入口 /api/compatible", bad.baseUrl);
+  } else ok("没有预置火山方舟 /api/compatible：那是 Anthropic 协议入口");
 
   // 打开「添加服务商」：预设 chip 点一下就把名称 / 地址 / 模型带上
   models.openModelManager();
@@ -1123,11 +1128,11 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   panel.querySelector("#mmAdd").__listeners.get("click")[0]();
   await settle();
   const urlInput = panel.querySelector("#pvUrl");
-  urlInput.value = "https://ark.cn-beijing.volces.com/api/compatible/v1/chat/completions";
+  urlInput.value = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
   urlInput.dispatch("input");
   await settle();
   const fullHint = String(panel.querySelector("#pvUrlHint").textContent ?? "");
-  if (!fullHint.includes("https://ark.cn-beijing.volces.com/api/compatible/v1/chat/completions")) {
+  if (!fullHint.includes("https://ark.cn-beijing.volces.com/api/v3/chat/completions")) {
     fail("完整地址没有被原样使用", fullHint);
   } else ok("完整地址原样使用：粘 .../chat/completions 不会再被拼上第二段");
 

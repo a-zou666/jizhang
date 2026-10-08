@@ -62,12 +62,12 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 | --- | --- | --- | --- |
 | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4.7-flash`（免费）、`glm-4.7`、`glm-4.6` | `glm-4.6v-flash`（免费）、`glm-4.6v`、`glm-ocr` |
 | 豆包（火山方舟） | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` | `doubao-seed-2-1-pro-260915`、Lite、接入点 ID（`ep-` 开头） | `doubao-seed-2-0-mini-260428`、`doubao-seed-vision`、`doubao-ocr` |
-| 豆包（兼容入口） | `https://ark.cn-beijing.volces.com/api/compatible/v1/chat/completions` | 同上 | 同上 |
 | 腾讯混元 TokenHub | `https://tokenhub.tencentcloudmaas.com/v1/chat/completions` | `hy3`、`hy3-preview` | `hy-vision-2.0-instruct`、`hy-vision-1.5-thinking` |
 | 腾讯混元（旧入口） | `https://api.hunyuan.cloud.tencent.com/v1/chat/completions` | `hy3`、`hunyuan-turbos`、`hunyuan-lite` | 旧视觉模型已下线 |
 | DeepSeek | `https://api.deepseek.com/v1/chat/completions` | `deepseek-chat`、`deepseek-reasoner` | — |
 | 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | `qwen-plus`、`qwen-turbo` | `qwen-vl-max` |
 
+> ⚠️ 火山方舟的 `https://ark.cn-beijing.volces.com/api/compatible` 是 **Anthropic（Claude）** 协议入口，不是 OpenAI 兼容入口；想走 OpenAI SDK 的请用 `/api/v3`。列表里自动拉到的模型如果名字带 `seedream / seedance / cogview / cogvideo` 是生图/生视频模型，不要选作默认模型，否则 `/chat/completions` 会 404。\n
 三家都是 OpenAI 兼容协议，鉴权统一 `Authorization: Bearer <API Key>`。
 
 ### 接口地址怎么填

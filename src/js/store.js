@@ -69,18 +69,6 @@ export const PROVIDER_PRESETS = [
     ],
   },
   {
-    key: "ark-compatible",
-    name: "豆包（兼容入口）",
-    protocol: "openai-compatible",
-    baseUrl: "https://ark.cn-beijing.volces.com/api/compatible",
-    keyHint: "方舟 OpenAI 兼容入口（/api/compatible/v1/...），模型填接入点 ID 或模型名",
-    models: [
-      { id: "doubao-seed-2-0-mini-260428", alias: "豆包 2.0 mini（多模态·识图）" },
-      { id: "doubao-seed-vision", alias: "豆包视觉理解（识图）" },
-      { id: "doubao-ocr", alias: "豆包 OCR（票据）" },
-    ],
-  },
-  {
     key: "hunyuan",
     name: "腾讯混元 TokenHub",
     protocol: "openai-compatible",
