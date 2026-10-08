@@ -65,7 +65,25 @@ fn default_base_url(protocol: &str) -> &'static str {
     }
 }
 
-/// 把用户填写的 Base URL 补全成真正的请求地址
+/// 形如 /v1、/api/paas/v4、/api/v3 这种「已经带版本号」的地址：后面只拼资源名即可
+/// （各家前缀不统一 —— 智谱 v4、方舟 v3、混元 v1 —— 统一补 /v1 会拼出错误地址）
+fn has_version_segment(base: &str) -> bool {
+    let last = base.rsplit('/').next().unwrap_or_default();
+    let body = last.strip_prefix('v').unwrap_or(last);
+    !body.is_empty() && body.chars().next().is_some_and(|c| c.is_ascii_digit())
+}
+
+/// 剥掉已经写全的资源名，避免在 .../chat/completions 后面再拼一段
+fn strip_resource(base: &str) -> String {
+    for suffix in ["/chat/completions", "/messages", "/models"] {
+        if let Some(rest) = base.strip_suffix(suffix) {
+            return rest.trim_end_matches('/').to_string();
+        }
+    }
+    base.to_string()
+}
+
+/// 把用户填写的 Base URL（或完整地址）补全成真正的请求地址
 fn endpoint(protocol: &str, base_url: &str) -> String {
     let raw = base_url.trim().trim_end_matches('/');
     let base = if raw.is_empty() {
@@ -75,16 +93,16 @@ fn endpoint(protocol: &str, base_url: &str) -> String {
     };
 
     if protocol == "claude" {
-        if base.ends_with("/v1/messages") {
+        if base.ends_with("/v1/messages") || base.ends_with("/messages") {
             base
-        } else if base.ends_with("/v1") {
+        } else if has_version_segment(&base) {
             format!("{}/messages", base)
         } else {
             format!("{}/v1/messages", base)
         }
     } else if base.ends_with("/chat/completions") {
         base
-    } else if base.ends_with("/v1") {
+    } else if has_version_segment(&base) {
         format!("{}/chat/completions", base)
     } else {
         format!("{}/v1/chat/completions", base)
@@ -106,6 +124,7 @@ async fn request_model(
     api_model: &str,
     system_prompt: &str,
     user_text: &str,
+    image: Option<&ImageInput>,
 ) -> Result<String, String> {
     if api_key.trim().is_empty() {
         return Err("请先在设置页填写 API Key".into());
@@ -117,6 +136,30 @@ async fn request_model(
     let url = endpoint(protocol, base_url);
     let http = client()?;
 
+    // 带图时 content 变成「文字 + 图片」的数组，两种协议写法不同
+    let content = match image {
+        None => json!(user_text),
+        Some(img) => {
+            if protocol == "claude" {
+                json!([
+                    {"type": "text", "text": user_text},
+                    {"type": "image", "source": {
+                        "type": "base64",
+                        "media_type": img.mime,
+                        "data": img.data
+                    }}
+                ])
+            } else {
+                json!([
+                    {"type": "text", "text": user_text},
+                    {"type": "image_url", "image_url": {
+                        "url": format!("data:{};base64,{}", img.mime, img.data)
+                    }}
+                ])
+            }
+        }
+    };
+
     let request = if protocol == "claude" {
         http.post(&url)
             .header("x-api-key", api_key.trim())
@@ -125,7 +168,7 @@ async fn request_model(
                 "model": api_model.trim(),
                 "max_tokens": MAX_TOKENS,
                 "system": system_prompt,
-                "messages": [{"role": "user", "content": user_text}],
+                "messages": [{"role": "user", "content": content}],
                 "temperature": 0.0
             }))
     } else {
@@ -135,7 +178,7 @@ async fn request_model(
                 "model": api_model.trim(),
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_text}
+                    {"role": "user", "content": content}
                 ],
                 "temperature": 0.0
             }))
@@ -464,40 +507,27 @@ async fn process_accounting(
     Ok(records)
 }
 
-/// 意图识别 + 记账解析二合一：一次无状态调用完成「新增 / 删除 / 查询 / 闲聊」。
-/// 账目上下文由前端以紧凑行文本（`序号|日期|物品|分类|金额`）传入，
-/// 每次对话不携带历史消息 —— 输入=提示词+一句话+账目快照，输出=一个 JSON 对象。
-#[command]
-async fn process_intent(
-    text: String,
-    protocol: String,
-    base_url: String,
-    api_key: String,
-    api_model: String,
-    categories: Option<Vec<String>>,
-    ledger: Option<String>,
-) -> Result<IntentResult, String> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Err("请先说点什么，比如「昨天买鼠标 120」".into());
-    }
+/// 可选图片输入：mime + base64 正文（允许调用方直接传 data URL）
+struct ImageInput {
+    mime: String,
+    data: String,
+}
 
-    let protocol = normalize_protocol(&protocol);
-    let categories: Vec<String> = categories
-        .unwrap_or_default()
+fn clean_categories(raw: Option<Vec<String>>) -> Vec<String> {
+    raw.unwrap_or_default()
         .into_iter()
         .map(|name| name.trim().to_string())
         .filter(|name| !name.is_empty())
-        .collect();
-    let today = today().format("%Y-%m-%d").to_string();
+        .collect()
+}
 
+fn intent_prompt(today: &str, categories: &[String], ledger: &str) -> String {
     let category_hint = if categories.is_empty() {
         "餐饮、交通、数码、日用、娱乐、其他".to_string()
     } else {
         categories.join("、")
     };
     let ledger_text = ledger
-        .unwrap_or_default()
         .lines()
         .map(|line| line.trim())
         .filter(|line| !line.is_empty())
@@ -510,7 +540,7 @@ async fn process_intent(
         ledger_text
     };
 
-    let system_prompt = format!(
+    format!(
         "你是记账助手，管理用户的支出账本。今天是 {today}。\n\
          用户分类：{category_hint}\n\
          账本（每行=序号|日期|物品|分类|金额，最新在前）：\n\
@@ -523,18 +553,14 @@ async fn process_intent(
          规则：相对日期（今天/昨天/前天/上周五等）换算为 YYYY-MM-DD，未提日期默认今天；\n\
          amount 是数字不带符号；一句话含多笔支出输出多条；ids 只能取账本里已有的序号；\n\
          category 只能从用户分类里选，拿不准用「其他」。"
-    );
-
-    let content = request_model(
-        protocol,
-        &base_url,
-        &api_key,
-        &api_model,
-        &system_prompt,
-        trimmed,
     )
-    .await?;
+}
 
+fn parse_intent_content(
+    content: &str,
+    categories: &[String],
+    today: &str,
+) -> Result<IntentResult, String> {
     let intent = extract_object(&content)?;
     let op = intent
         .get("op")
@@ -571,9 +597,9 @@ async fn process_intent(
                 let raw_category = first_string(item, &["category", "categoryName", "type", "tag"]);
                 let raw_item = first_string(item, &["item", "name", "title", "desc", "description"]);
                 items.push(Expense {
-                    date: normalize_date(&raw_date, &today),
+                    date: normalize_date(&raw_date, today),
                     item: normalize_item(&raw_item),
-                    category: normalize_category(&raw_category, &categories),
+                    category: normalize_category(&raw_category, categories),
                     amount: (amount * 100.0).round() / 100.0,
                 });
             }
@@ -598,6 +624,94 @@ async fn process_intent(
     })
 }
 
+/// 意图识别 + 记账解析二合一：一次无状态调用完成「新增 / 删除 / 查询 / 闲聊」。
+/// 账目上下文由前端以紧凑行文本（`序号|日期|物品|分类|金额`）传入，
+/// 每次对话不携带历史消息 —— 输入=提示词+一句话+账目快照，输出=一个 JSON 对象。
+#[command]
+async fn process_intent(
+    text: String,
+    protocol: String,
+    base_url: String,
+    api_key: String,
+    api_model: String,
+    categories: Option<Vec<String>>,
+    ledger: Option<String>,
+) -> Result<IntentResult, String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("请先说点什么，比如「昨天买鼠标 120」".into());
+    }
+
+    let categories = clean_categories(categories);
+    let today = today().format("%Y-%m-%d").to_string();
+    let prompt = intent_prompt(&today, &categories, &ledger.unwrap_or_default());
+
+    let content = request_model(
+        &normalize_protocol(&protocol),
+        &base_url,
+        &api_key,
+        &api_model,
+        &prompt,
+        trimmed,
+        None,
+    )
+    .await?;
+
+    parse_intent_content(&content, &categories, &today)
+}
+
+/// 识图记账：把小票 / 支付截图交给视觉模型，解析结果跟文字指令完全一致
+#[command]
+async fn process_image(
+    text: String,
+    image: String,
+    mime: String,
+    protocol: String,
+    base_url: String,
+    api_key: String,
+    api_model: String,
+    categories: Option<Vec<String>>,
+    ledger: Option<String>,
+) -> Result<IntentResult, String> {
+    // 允许前端直接传 data URL，这里只要逗号后面的 base64 正文
+    let data = image.rsplit(',').next().unwrap_or_default().trim().to_string();
+    if data.is_empty() {
+        return Err("图片内容是空的".into());
+    }
+    let media = if mime.trim().is_empty() {
+        "image/jpeg".to_string()
+    } else {
+        mime.trim().to_string()
+    };
+    let user_text = if text.trim().is_empty() {
+        "请按这张图片记账"
+    } else {
+        text.trim()
+    };
+
+    let categories = clean_categories(categories);
+    let today = today().format("%Y-%m-%d").to_string();
+    let mut prompt = intent_prompt(&today, &categories, &ledger.unwrap_or_default());
+    prompt.push_str(
+        "\n用户会附上一张图片（小票 / 账单 / 支付截图）：请从图片里读出每一笔消费，\
+         按上面的规则输出 JSON；图片里没有消费信息或看不清就输出 op=none。",
+    );
+
+    let image_input = ImageInput { mime: media, data };
+    let content = request_model(
+        &normalize_protocol(&protocol),
+        &base_url,
+        &api_key,
+        &api_model,
+        &prompt,
+        user_text,
+        Some(&image_input),
+    )
+    .await?;
+
+    parse_intent_content(&content, &categories, &today)
+}
+
 #[command]
 async fn test_connection(
     protocol: String,
@@ -608,7 +722,7 @@ async fn test_connection(
     let protocol = normalize_protocol(&protocol);
     let prompt = "只回复两个字：正常";
 
-    match request_model(&protocol, &base_url, &api_key, &api_model, prompt, "连接测试").await {
+    match request_model(&protocol, &base_url, &api_key, &api_model, prompt, "连接测试", None).await {
         Ok(reply) => Ok(TestResult {
             ok: true,
             message: format!("连接成功：{}", truncate(&reply, 80)),
@@ -628,11 +742,9 @@ fn models_endpoint(protocol: &str, base_url: &str) -> String {
     let base = if raw.is_empty() {
         default_base_url(protocol).to_string()
     } else {
-        raw.to_string()
+        strip_resource(&raw)
     };
-    if base.ends_with("/models") {
-        base
-    } else if base.ends_with("/v1") {
+    if has_version_segment(&base) {
         format!("{}/models", base)
     } else {
         format!("{}/v1/models", base)
@@ -737,6 +849,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             process_accounting,
             process_intent,
+            process_image,
             test_connection,
             list_models
         ])

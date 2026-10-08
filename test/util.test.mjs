@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  buildEndpoint,
+  buildModelsEndpoint,
   clamp,
   dateKey,
   escapeHtml,
@@ -80,4 +82,57 @@ test("clamp / escapeHtml / formatCellAmount", () => {
   assert.equal(escapeHtml('<a>&"'), "&lt;a&gt;&amp;&quot;");
   assert.equal(formatCellAmount(120), "120");
   assert.equal(formatCellAmount(12000), "1.2万");
+});
+
+test("接口地址补全：各家前缀不一样也能拼对", () => {
+  // 不带版本：补 /v1
+  assert.equal(
+    buildEndpoint("openai-compatible", "https://api.deepseek.com"),
+    "https://api.deepseek.com/v1/chat/completions",
+  );
+  // 已带 /v1
+  assert.equal(
+    buildEndpoint("openai-compatible", "https://api.hunyuan.cloud.tencent.com/v1/"),
+    "https://api.hunyuan.cloud.tencent.com/v1/chat/completions",
+  );
+  // 智谱 v4 / 方舟 v3：只补资源名，不能再插一个 /v1
+  assert.equal(
+    buildEndpoint("openai-compatible", "https://open.bigmodel.cn/api/paas/v4"),
+    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  );
+  assert.equal(
+    buildEndpoint("openai-compatible", "https://ark.cn-beijing.volces.com/api/v3"),
+    "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+  );
+  // 方舟兼容入口：没有版本号，按 OpenAI 习惯补 /v1
+  assert.equal(
+    buildEndpoint("openai-compatible", "https://ark.cn-beijing.volces.com/api/compatible"),
+    "https://ark.cn-beijing.volces.com/api/compatible/v1/chat/completions",
+  );
+  // 直接粘完整地址：原样使用
+  const full = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+  assert.equal(buildEndpoint("openai-compatible", full), full);
+  // Claude 走 /v1/messages
+  assert.equal(buildEndpoint("claude", "https://api.anthropic.com"), "https://api.anthropic.com/v1/messages");
+  // 空地址回落到协议默认
+  assert.equal(buildEndpoint("openai", ""), "https://api.openai.com/v1/chat/completions");
+});
+
+test("模型列表地址：完整地址也不会被拼歪", () => {
+  assert.equal(
+    buildModelsEndpoint("openai-compatible", "https://api.deepseek.com"),
+    "https://api.deepseek.com/v1/models",
+  );
+  assert.equal(
+    buildModelsEndpoint("openai-compatible", "https://open.bigmodel.cn/api/paas/v4"),
+    "https://open.bigmodel.cn/api/paas/v4/models",
+  );
+  assert.equal(
+    buildModelsEndpoint("openai-compatible", "https://ark.cn-beijing.volces.com/api/v3/chat/completions"),
+    "https://ark.cn-beijing.volces.com/api/v3/models",
+  );
+  assert.equal(
+    buildModelsEndpoint("openai-compatible", "https://ark.cn-beijing.volces.com/api/compatible"),
+    "https://ark.cn-beijing.volces.com/api/compatible/v1/models",
+  );
 });

@@ -222,23 +222,30 @@
           <div class="chat-scroll" id="chatScroll">
             <div class="chat-empty" id="chatEmpty">
               <p class="chat-empty__title">用一句话记账</p>
-              <p class="chat-empty__desc">说人话就行：「昨天买鼠标花了 120」「这个月吃饭花了多少」</p>
+              <p class="chat-empty__desc">说人话就行：「昨天买鼠标花了 120」「这个月吃饭花了多少」，也可以直接发小票 / 支付截图让它自己认</p>
             </div>
             <div class="chat-list" id="chatList"></div>
             <div class="chip-row" id="chatSuggest"></div>
           </div>
 
           <div class="chat-composer">
-            <textarea
-              class="chat-composer__input"
-              id="chatInput"
-              rows="1"
-              placeholder="说点什么…"
-              aria-label="对话输入"
-            ></textarea>
-            <button class="chat-composer__send" id="chatSend" type="button" aria-label="发送">
-              <span data-icon="send" aria-hidden="true"></span>
-            </button>
+            <div class="chat-attach" id="chatAttach" hidden></div>
+            <div class="chat-composer__row">
+              <button class="chat-composer__icon" id="chatImage" type="button" aria-label="上传图片识别账单">
+                <span data-icon="image" aria-hidden="true"></span>
+              </button>
+              <textarea
+                class="chat-composer__input"
+                id="chatInput"
+                rows="1"
+                placeholder="说点什么…"
+                aria-label="对话输入"
+              ></textarea>
+              <button class="chat-composer__send" id="chatSend" type="button" aria-label="发送">
+                <span data-icon="send" aria-hidden="true"></span>
+              </button>
+            </div>
+            <input class="sr-only" id="chatFile" type="file" accept="image/*" aria-hidden="true" tabindex="-1" />
           </div>
         </section>
       </div>

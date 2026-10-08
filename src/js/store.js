@@ -30,6 +30,106 @@ export const PROTOCOL_PRESETS = {
 
 export const PROTOCOL_ORDER = ["claude", "openai", "openai-compatible"];
 
+/**
+ * 常用服务商预设：点一下自动填好名称 / 协议 / 地址，并带上这家常用的模型 ID
+ * （识图用的视觉模型放在前面标注出来）。只填字段、不自动启用 —— 启用仍然要用户点。
+ * 地址都写成「基址」，完整请求地址由 util.buildEndpoint 补全；用户也可以直接在
+ * 表单里粘完整地址（…/chat/completions），原样使用。
+ */
+export const PROVIDER_PRESETS = [
+  {
+    key: "zhipu",
+    name: "智谱 GLM",
+    protocol: "openai-compatible",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    keyHint: "open.bigmodel.cn → API Keys（形如 xxxx.yyyy）",
+    models: [
+      { id: "glm-4.7-flash", alias: "GLM-4.7-Flash（免费）" },
+      { id: "glm-4.7", alias: "GLM-4.7" },
+      { id: "glm-4.6", alias: "GLM-4.6" },
+      { id: "glm-4.6v-flash", alias: "GLM-4.6V-Flash（免费·识图）" },
+      { id: "glm-4.6v", alias: "GLM-4.6V（识图）" },
+      { id: "glm-ocr", alias: "GLM-OCR（票据识别）" },
+    ],
+  },
+  {
+    key: "ark",
+    name: "豆包（火山方舟）",
+    protocol: "openai-compatible",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    keyHint: "火山方舟控制台 → API Key；模型可填接入点 ID（ep- 开头）或模型名",
+    models: [
+      { id: "doubao-seed-2-1-pro-260915", alias: "豆包 2.1 Pro" },
+      { id: "doubao-seed-2-1-lite-260915", alias: "豆包 2.1 Lite" },
+      { id: "doubao-seed-2-0-mini-260428", alias: "豆包 2.0 mini（多模态·识图）" },
+      { id: "doubao-seed-vision", alias: "豆包视觉理解（识图）" },
+      { id: "doubao-ocr", alias: "豆包 OCR（票据）" },
+      { id: "glm-5.1", alias: "GLM-5.1（方舟托管）" },
+      { id: "deepseek-v4-pro", alias: "DeepSeek V4 Pro（方舟托管）" },
+    ],
+  },
+  {
+    key: "ark-compatible",
+    name: "豆包（兼容入口）",
+    protocol: "openai-compatible",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/compatible",
+    keyHint: "方舟 OpenAI 兼容入口（/api/compatible/v1/...），模型填接入点 ID 或模型名",
+    models: [
+      { id: "doubao-seed-2-0-mini-260428", alias: "豆包 2.0 mini（多模态·识图）" },
+      { id: "doubao-seed-vision", alias: "豆包视觉理解（识图）" },
+      { id: "doubao-ocr", alias: "豆包 OCR（票据）" },
+    ],
+  },
+  {
+    key: "hunyuan",
+    name: "腾讯混元 TokenHub",
+    protocol: "openai-compatible",
+    baseUrl: "https://tokenhub.tencentcloudmaas.com/v1",
+    keyHint: "腾讯云 TokenHub 控制台创建 Key（广州节点；也可换 intl / us 节点）",
+    models: [
+      { id: "hy3", alias: "Hy3" },
+      { id: "hy3-preview", alias: "Hy3 Preview" },
+      { id: "hy-vision-2.0-instruct", alias: "HY-Vision 2.0（识图）" },
+      { id: "hy-vision-1.5-thinking", alias: "HY-Vision 1.5 Thinking（识图）" },
+    ],
+  },
+  {
+    key: "hunyuan-legacy",
+    name: "腾讯混元（旧入口）",
+    protocol: "openai-compatible",
+    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    keyHint: "旧版混元入口（视觉模型已下线，仅文本）",
+    models: [
+      { id: "hy3", alias: "Hy3" },
+      { id: "hunyuan-turbos", alias: "Hunyuan TurboS" },
+      { id: "hunyuan-lite", alias: "Hunyuan Lite（免费）" },
+    ],
+  },
+  {
+    key: "deepseek",
+    name: "DeepSeek",
+    protocol: "openai-compatible",
+    baseUrl: "https://api.deepseek.com/v1",
+    keyHint: "platform.deepseek.com → API Keys",
+    models: [
+      { id: "deepseek-chat", alias: "DeepSeek V3" },
+      { id: "deepseek-reasoner", alias: "DeepSeek R1（推理）" },
+    ],
+  },
+  {
+    key: "qwen",
+    name: "通义千问",
+    protocol: "openai-compatible",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    keyHint: "阿里云百炼 → API Key",
+    models: [
+      { id: "qwen-plus", alias: "Qwen Plus" },
+      { id: "qwen-turbo", alias: "Qwen Turbo" },
+      { id: "qwen-vl-max", alias: "Qwen-VL-Max（识图）" },
+    ],
+  },
+];
+
 const DEFAULT_STATE = () => ({
   records: [],
   // 对话页的消息流（只存最近 CHAT_LIMIT 条，纯本机）
@@ -153,10 +253,36 @@ function sanitizeModels(raw) {
 
 /* ---------------- 对话页消息流 ---------------- */
 const CHAT_LIMIT = 200;
+/**
+ * 消息里的图片只存缩略图（气泡显示用），且限制体积：
+ * 原图可能有几百 KB，200 条消息全存下来会直接把 localStorage 撑爆。
+ */
+export const CHAT_IMAGE_LIMIT = 40_000;
+/** 缩略图只保留最近若干条：更早的消息清掉图片、文字照旧留着 */
+const CHAT_IMAGE_KEEP = 30;
+
+/** 只放行「真的是图片且不太大」的缩略图，其余一律丢弃（不影响文字与其他字段） */
+function sanitizeChatImage(raw) {
+  if (typeof raw !== "string" || !raw.startsWith("data:image/")) return "";
+  return raw.length > CHAT_IMAGE_LIMIT ? "" : raw;
+}
+
+/** 从后往前数，超过 CHAT_IMAGE_KEEP 条带图的消息就丢掉缩略图（文字保留） */
+function pruneChatImages(messages) {
+  let seen = 0;
+  const out = messages.slice();
+  for (let index = out.length - 1; index >= 0; index -= 1) {
+    if (!out[index].image) continue;
+    seen += 1;
+    if (seen > CHAT_IMAGE_KEEP) out[index] = { ...out[index], image: "" };
+  }
+  return out;
+}
 
 /**
- * 消息：{ id, role: "user" | "assistant", text, kind, items[], state, at }
+ * 消息：{ id, role: "user" | "assistant", text, kind, items[], state, at, image }
  * kind: text（纯聊天）/ add（待入账）/ del（待删除）/ query（查询结果）
+ * image: 用户发的图片缩略图（data URL，超上限会自动丢弃）
  * 账目快照直接存在消息里，重进界面才能原样还原，不用重新问一遍 AI
  */
 function sanitizeChatMessage(raw) {
@@ -174,6 +300,7 @@ function sanitizeChatMessage(raw) {
     items,
     state: ["pending", "done", "ignored", "error"].includes(raw.state) ? raw.state : "done",
     at: Number.isFinite(Number(raw.at)) ? Number(raw.at) : Date.now(),
+    image: sanitizeChatImage(raw.image),
   };
 }
 
@@ -187,7 +314,7 @@ export const getChat = () => state.chat;
 export function appendChat(message) {
   const clean = sanitizeChatMessage(message);
   if (!clean) return null;
-  state.chat = [...state.chat, clean].slice(-CHAT_LIMIT);
+  state.chat = pruneChatImages([...state.chat, clean].slice(-CHAT_LIMIT));
   commit("chat");
   return clean;
 }

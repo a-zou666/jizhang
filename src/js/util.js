@@ -216,6 +216,56 @@ export function formatCellAmount(value) {
   return formatMoney(amount);
 }
 
+/* ---------------- 接口地址补全 ---------------- */
+/**
+ * 各家地址长得不一样：DeepSeek 是 https://api.deepseek.com（要补 /v1），
+ * 智谱是 .../api/paas/v4、火山方舟是 .../api/v3、混元是 .../v1（只需补资源名），
+ * 还有人直接粘完整地址 .../chat/completions。这里统一补全成真正的请求地址，
+ * 规则与 Rust 端 lib.rs 的 endpoint() 保持一致。
+ */
+export function hasVersionSegment(base) {
+  const last = String(base).split("/").pop() ?? "";
+  const body = last.startsWith("v") ? last.slice(1) : last;
+  return Boolean(body) && /^\d/.test(body);
+}
+
+/** 剥掉已经写全的资源名，避免在 .../chat/completions 后面再拼一段 */
+const stripResource = (base) => {
+  for (const suffix of ["/chat/completions", "/messages", "/models"]) {
+    if (base.endsWith(suffix)) return base.slice(0, -suffix.length).replace(/\/+$/, "");
+  }
+  return base;
+};
+
+const DEFAULT_URLS = {
+  claude: "https://api.anthropic.com",
+  openai: "https://api.openai.com",
+  "openai-compatible": "https://api.openai.com",
+};
+
+/** Base URL（或完整地址）→ 对话请求地址 */
+export function buildEndpoint(protocol, baseUrl) {
+  const raw = String(baseUrl ?? "").trim().replace(/\/+$/, "");
+  const base = raw || DEFAULT_URLS[protocol] || DEFAULT_URLS["openai-compatible"];
+  if (protocol === "claude") {
+    if (base.endsWith("/v1/messages")) return base;
+    if (base.endsWith("/messages")) return base;
+    if (hasVersionSegment(base)) return `${base}/messages`;
+    return `${base}/v1/messages`;
+  }
+  if (base.endsWith("/chat/completions")) return base;
+  if (hasVersionSegment(base)) return `${base}/chat/completions`;
+  return `${base}/v1/chat/completions`;
+}
+
+/** Base URL（或完整地址）→ 模型列表地址（供「从 API 拉取」用） */
+export function buildModelsEndpoint(protocol, baseUrl) {
+  const raw = String(baseUrl ?? "").trim().replace(/\/+$/, "");
+  const base = stripResource(raw || DEFAULT_URLS[protocol] || DEFAULT_URLS["openai-compatible"]);
+  if (hasVersionSegment(base)) return `${base}/models`;
+  return `${base}/v1/models`;
+}
+
 /* ---------------- 杂项 ---------------- */
 export function uid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

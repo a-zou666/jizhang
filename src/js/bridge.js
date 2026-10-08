@@ -1,6 +1,6 @@
 /** 前后端桥接：Tauri invoke 封装 + 非 Tauri 环境兜底 */
 
-import { mockIntent, mockParse, mockTestConnection } from "./mock.js";
+import { mockImage, mockIntent, mockParse, mockTestConnection } from "./mock.js";
 import { normalizeDateKey, parseAmount } from "./util.js";
 
 const tauriInvoke = () => {
@@ -60,6 +60,28 @@ export async function parseAccounting(text, settings) {
 /** 解析等待上限：超过就放弃并让用户重试，避免界面一直转圈没有反馈 */
 export const AI_TIMEOUT_MS = 25000;
 
+/** 归一化一次意图调用的返回：日期 / 金额兜底，并剔除救不回来的条目 */
+function normalizeIntent(result) {
+  const items = (Array.isArray(result?.items) ? result.items : [])
+    .map(normalizeRaw)
+    .filter((record) => record.amount > 0 && record.date);
+  return {
+    op: String(result?.op ?? "none"),
+    items,
+    ids: Array.isArray(result?.ids) ? result.ids.map((id) => Number(id)).filter(Number.isFinite) : [],
+    reply: String(result?.reply ?? ""),
+  };
+}
+
+/** 解析失败时统一成一句人话，前端直接展示并可重试 */
+function describeIntentError(error) {
+  return new Error(
+    error?.message === "请求超时"
+      ? `模型 ${AI_TIMEOUT_MS / 1000} 秒未响应，请稍后重试或换一个模型`
+      : String(error?.message ?? error),
+  );
+}
+
 export async function parseIntent(text, settings, ledger) {
   if (!hasBackend()) return mockIntent(text, ledger);
 
@@ -79,22 +101,43 @@ export async function parseIntent(text, settings, ledger) {
     result = await withTimeout(call(), AI_TIMEOUT_MS);
   } catch (error) {
     // 超时或后端异常统一成一句人话，前端直接展示并可重试
-    throw new Error(
-      error?.message === "请求超时"
-        ? `模型 ${AI_TIMEOUT_MS / 1000} 秒未响应，请稍后重试或换一个模型`
-        : String(error?.message ?? error),
-    );
+    throw describeIntentError(error);
   }
 
-  const items = (Array.isArray(result?.items) ? result.items : [])
-    .map(normalizeRaw)
-    .filter((record) => record.amount > 0 && record.date);
-  return {
-    op: String(result?.op ?? "none"),
-    items,
-    ids: Array.isArray(result?.ids) ? result.ids.map((id) => Number(id)).filter(Number.isFinite) : [],
-    reply: String(result?.reply ?? ""),
-  };
+  return normalizeIntent(result);
+}
+
+/**
+ * 识图记账：把图片（data URL）连同可选的一句话交给视觉模型，
+ * 让它自己从小票 / 账单 / 支付截图里读出每一笔并输出同样的意图 JSON。
+ * 用法与 parseIntent 完全一致，前端复用同一套 add / del / query 卡片。
+ * @param {string} image data URL（前端已压缩）
+ * @param {string} mime 图片 MIME，如 image/jpeg
+ */
+export async function parseImage(text, image, mime, settings, ledger) {
+  if (!hasBackend()) return mockImage(text, ledger);
+
+  const call = () =>
+    invoke("process_image", {
+      text,
+      image,
+      mime,
+      protocol: settings.protocol,
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      apiModel: settings.model,
+      categories: settings.categories,
+      ledger,
+    });
+
+  let result;
+  try {
+    result = await withTimeout(call(), AI_TIMEOUT_MS);
+  } catch (error) {
+    throw describeIntentError(error);
+  }
+
+  return normalizeIntent(result);
 }
 
 /**

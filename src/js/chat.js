@@ -1,8 +1,9 @@
 /** 对话页：像聊天软件一样跟 AI 记账（消息流 + 内联卡片） */
 
-import { hasBackend, parseIntent } from "./bridge.js";
+import { hasBackend, parseImage, parseIntent } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
 import { icon } from "./icons.js";
+import { prepareImage } from "./image.js";
 import {
   addRecords,
   appendChat,
@@ -26,6 +27,57 @@ const SUGGESTIONS = [
 ];
 
 let busy = false;
+/** 已选好、还没发出去的图片（发出后清空；只留缩略图进历史） */
+let pendingImage = null;
+
+/* ---------------- 待发送的图片 ---------------- */
+function setPendingImage(image) {
+  pendingImage = image ?? null;
+  renderAttach();
+}
+
+function renderAttach() {
+  const box = $("#chatAttach");
+  if (!box) return;
+  box.replaceChildren();
+  box.hidden = !pendingImage;
+
+  const input = $("#chatInput");
+  if (input) {
+    input.placeholder = pendingImage ? "补充说明（可留空）" : "说点什么…";
+  }
+  if (!pendingImage) return;
+
+  const thumb = document.createElement("img");
+  thumb.classList.add("chat-attach__img");
+  thumb.src = pendingImage.thumb || pendingImage.dataUrl;
+  thumb.alt = "待发送的图片";
+
+  const meta = document.createElement("span");
+  meta.classList.add("chat-attach__meta");
+  meta.textContent = "已选好图片";
+
+  const remove = document.createElement("button");
+  remove.classList.add("chat-attach__remove");
+  remove.type = "button";
+  remove.setAttribute("aria-label", "移除图片");
+  remove.innerHTML = icon("close", { size: 14 });
+  remove.addEventListener("click", () => setPendingImage(null));
+
+  box.append(thumb, meta, remove);
+}
+
+/** 选完图：压缩 + 生成缩略图，失败只提示不打断输入 */
+async function onPickImage(file) {
+  try {
+    const prepared = await prepareImage(file);
+    setPendingImage(prepared);
+    haptic(8);
+  } catch (error) {
+    console.error(error);
+    toast(error?.message ?? "图片读取失败", "error");
+  }
+}
 
 /* ---------------- 渲染 ---------------- */
 export function renderChat() {
@@ -89,6 +141,14 @@ function bubbleFor(message) {
 
   const body = document.createElement("div");
   body.classList.add("chat-bubble");
+
+  if (message.image) {
+    const image = document.createElement("img");
+    image.classList.add("chat-bubble__image");
+    image.src = message.image;
+    image.alt = "上传的图片";
+    body.append(image);
+  }
 
   if (message.text) {
     const text = document.createElement("p");
@@ -209,10 +269,11 @@ function button(label, className, onClick) {
 }
 
 /* ---------------- 发送 ---------------- */
-export async function sendMessage(raw) {
+export async function sendMessage(raw, image = pendingImage) {
   const text = String(raw ?? "").trim();
   const input = $("#chatInput");
-  if (!text || busy) return;
+  if (busy) return;
+  if (!text && !image) return;
 
   if (hasBackend() && !getSettings().apiKey) {
     toast("请先在设置 → 模型管理里配好服务商", "error");
@@ -222,8 +283,16 @@ export async function sendMessage(raw) {
   busy = true;
   $("#chatSend").disabled = true;
   if (input) input.value = "";
+  if (image) setPendingImage(null);
 
-  appendChat({ role: "user", text, kind: "text", state: "done", at: Date.now() });
+  appendChat({
+    role: "user",
+    text,
+    kind: "text",
+    state: "done",
+    at: Date.now(),
+    image: image?.thumb ?? "",
+  });
   const thinking = appendChat({
     role: "assistant",
     text: "正在处理…",
@@ -234,7 +303,7 @@ export async function sendMessage(raw) {
   renderChat();
 
   try {
-    const result = await runIntent(text);
+    const result = await (image ? runImage(text, image) : runIntent(text));
     updateChat(thinking.id, result);
   } catch (error) {
     console.error(error);
@@ -253,8 +322,19 @@ export async function sendMessage(raw) {
 /** 一次独立请求：拿账目快照 → 解析 → 组装成一条助理消息 */
 async function runIntent(text) {
   const { lines, byLineId } = buildLedger();
-  const { op, items, ids, reply } = await parseIntent(text, getSettings(), lines);
+  const result = await parseIntent(text, getSettings(), lines);
+  return routeIntent(result, byLineId);
+}
 
+/** 识图记账：把图片交给视觉模型，回来后走同一套 add / del / query 路由 */
+async function runImage(text, image) {
+  const { lines, byLineId } = buildLedger();
+  const result = await parseImage(text, image.dataUrl, image.mime, getSettings(), lines);
+  return routeIntent(result, byLineId);
+}
+
+/** 把模型返回的意图翻译成界面上的一条消息 */
+function routeIntent({ op, items, ids, reply }, byLineId) {
   if (op === "add" && items?.length) {
     return { text: "识别到这些账目，确认后入账：", kind: "add", items, state: "pending" };
   }
@@ -315,16 +395,30 @@ export function bindChat({ onNeedSettings } = {}) {
     }
   });
 
+  // 识图记账：点图标选图，选好后挂在输入区上方，发送时一起给模型
+  const imageBtn = $("#chatImage");
+  const fileInput = $("#chatFile");
+  if (imageBtn && fileInput) {
+    imageBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      fileInput.value = "";
+      if (file) await onPickImage(file);
+    });
+    setPendingImage(null);
+  }
+
   $("#chatModel").addEventListener("click", () => onNeedSettings?.());
 
   $("#chatClear").addEventListener("click", () => {
     confirmDialog({
       title: "清空对话",
-      message: "只清掉这里的聊天记录，账目不受影响。",
+      message: "只清掉这里的聊天记录与图片，账目不受影响。",
       confirmLabel: "清空",
       danger: true,
       onConfirm: () => {
         clearChat();
+        setPendingImage(null);
         renderChat();
         toast("对话已清空", "ok");
       },

@@ -1964,6 +1964,20 @@ a {
   color: var(--text-tertiary);
 }
 
+.mm-field__hint {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  word-break: break-all;
+}
+
+.mm-presets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
 .mm-pick {
   display: flex;
   align-items: center;
@@ -2171,16 +2185,84 @@ a {
   color: var(--text-tertiary);
 }
 
-/* 底部输入区：跟豆包 / 元宝一样的多行输入 + 发送 */
+/* 底部输入区：跟豆包 / 元宝一样的多行输入 + 发送，左边是识图上传 */
 .chat-composer {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4) calc(var(--space-3) + var(--safe-area-bottom));
   border-top: 1px solid var(--glass-hairline);
   background: rgba(255, 255, 255, var(--glass-alpha));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.chat-composer__row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.chat-composer__icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.chat-composer__icon:active {
+  transform: scale(0.94);
+  background: var(--surface-active);
+}
+
+/* 选好待发送的图片：缩略图 + 移除 */
+.chat-attach {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chat-attach[hidden] {
+  display: none;
+}
+
+.chat-attach__img {
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-hairline);
+  object-fit: cover;
+}
+
+.chat-attach__meta {
+  flex: 1;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.chat-attach__remove {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.chat-bubble__image {
+  display: block;
+  width: 100%;
+  max-width: 11rem;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-hairline);
 }
 
 .chat-composer__input {

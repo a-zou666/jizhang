@@ -22,7 +22,8 @@
 - **日历记账**：月支出概览与预算进度、每日金额小字、左右滑动或按钮翻月（可看历史）
 - **iOS 毛玻璃**：真正的 backdrop-blur 磨砂面板，彩色渐变底衬
 - **明细管理**：左滑删除、长按编辑、数据本地存储（不上云）
-- **模型管理**：可添加多个服务商（Claude / OpenAI / OpenAI 兼容），各自维护模型列表，手动添加或拉取后勾选，随时切换启用
+- **识图记账**：对话页可以直接发小票 / 账单 / 支付截图，视觉模型自己读出每一笔（需支持图片的模型）
+- **模型管理**：内置智谱 GLM / 豆包（火山方舟）/ 腾讯混元 / DeepSeek / 通义千问等预设，点一下填好地址并预置模型；地址可填基址也可粘完整 URL，切换启用完全手动
 - **数据导出 / 导入**：JSON / CSV 导出，导入时可选「合并」或「覆盖恢复」；备份里的 API Key 一律脱敏，导入不会覆盖本机真实凭据
 
 ## 界面截图
@@ -33,13 +34,13 @@
 | --- | --- | --- |
 | ![首页](docs/screenshots/home.png) | ![对话页](docs/screenshots/chat.png) | ![设置页](docs/screenshots/settings.png) |
 
-| 对话里的账目卡片 | 记一笔 | 编辑 / 删除 |
+| 对话里的账目卡片 | 识图记账（发小票） | 记一笔 |
 | --- | --- | --- |
-| ![账目卡片](docs/screenshots/chat-card.png) | ![记一笔](docs/screenshots/quick-add.png) | ![编辑记录](docs/screenshots/edit-record.png) |
+| ![账目卡片](docs/screenshots/chat-card.png) | ![识图记账](docs/screenshots/chat-image.png) | ![记一笔](docs/screenshots/quick-add.png) |
 
-| 模型管理 | 服务商的模型列表 |
-| --- | --- |
-| ![模型管理](docs/screenshots/model-manager.png) | ![模型列表](docs/screenshots/model-list.png) |
+| 编辑 / 删除 | 模型管理 | 服务商的模型列表 |
+| --- | --- | --- |
+| ![编辑记录](docs/screenshots/edit-record.png) | ![模型管理](docs/screenshots/model-manager.png) | ![模型列表](docs/screenshots/model-list.png) |
 
 ## 下载
 
@@ -49,19 +50,41 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 
 设置页 → **模型管理**：
 
-1. **添加服务商**：名称 + 协议 + Base URL + API Key
+1. **添加服务商**：可以直接点预设（智谱 GLM / 豆包 / 混元 / DeepSeek / 通义千问…），也可以手填：名称 + 协议 + 接口地址 + API Key
 2. **添加模型**：手动填模型 ID，或「从 API 拉取」后勾选加入
 3. **启用**：点列表里的服务商即启用，它的地址 / Key / 默认模型写入当前连接
 
 服务商与模型都只保存在本机，全部由你手动增删改——不会自动建档、也不会自动切换。
 
-| 协议 | 默认 Base URL |
-| --- | --- |
-| Claude 原生 | `https://api.anthropic.com` |
-| OpenAI 原生 | `https://api.openai.com` |
-| OpenAI 兼容 | 自行填写（如 `https://api.example.com`） |
+### 常用服务商（App 里点一下自动填好）
 
-Base URL 填到域名即可，程序自动补全 `/v1/chat/completions` 或 `/v1/messages`。
+| 服务商 | 接口地址（补全后） | 常用模型 | 识图 |
+| --- | --- | --- | --- |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4.7-flash`（免费）、`glm-4.7`、`glm-4.6` | `glm-4.6v-flash`（免费）、`glm-4.6v`、`glm-ocr` |
+| 豆包（火山方舟） | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` | `doubao-seed-2-1-pro-260915`、Lite、接入点 ID（`ep-` 开头） | `doubao-seed-2-0-mini-260428`、`doubao-seed-vision`、`doubao-ocr` |
+| 豆包（兼容入口） | `https://ark.cn-beijing.volces.com/api/compatible/v1/chat/completions` | 同上 | 同上 |
+| 腾讯混元 TokenHub | `https://tokenhub.tencentcloudmaas.com/v1/chat/completions` | `hy3`、`hy3-preview` | `hy-vision-2.0-instruct`、`hy-vision-1.5-thinking` |
+| 腾讯混元（旧入口） | `https://api.hunyuan.cloud.tencent.com/v1/chat/completions` | `hy3`、`hunyuan-turbos`、`hunyuan-lite` | 旧视觉模型已下线 |
+| DeepSeek | `https://api.deepseek.com/v1/chat/completions` | `deepseek-chat`、`deepseek-reasoner` | — |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | `qwen-plus`、`qwen-turbo` | `qwen-vl-max` |
+
+三家都是 OpenAI 兼容协议，鉴权统一 `Authorization: Bearer <API Key>`。
+
+### 接口地址怎么填
+
+- 填**基址**（`https://api.deepseek.com`、`https://open.bigmodel.cn/api/paas/v4`、`https://ark.cn-beijing.volces.com/api/v3`）或**完整地址**（`…/chat/completions`）都行，完整地址原样使用；
+- 已经带版本号（`v1` / `v3` / `v4`）的只补资源名，不会重复插一个 `/v1`；
+- 表单下方会实时显示「实际请求：…」，填错一眼就能看出来；
+- 各协议默认地址：Claude 原生 `https://api.anthropic.com`、OpenAI 原生 `https://api.openai.com`。
+
+### 识图记账
+
+对话页输入框左边是图片按钮：选一张小票 / 账单 / 支付截图，可以直接发送（也可以补一句话），
+视觉模型会自己读出每一笔，回来还是同一张「确认入账 / 忽略」卡片。
+
+- 需要启用一个**支持图片输入**的模型（如 `glm-4.6v-flash`、`doubao-seed-2-0-mini-260428`、`hy-vision-2.0-instruct`）；
+- 图片在本机压缩（最长边 1280）后再送模型，聊天记录里只留一张小缩略图，原图不入库；
+- 清空对话会把这些缩略图一起清掉。
 
 ## 开发
 

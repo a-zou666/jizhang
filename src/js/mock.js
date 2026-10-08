@@ -168,6 +168,21 @@ export function mockIntent(text, ledger = "") {
   return { op: "add", items: mockParse(ask), ids: [], reply: "" };
 }
 
+/**
+ * 本地兜底的识图记账：浏览器预览里没有后端、也没有视觉模型，
+ * 不假装识别出结果，直接说清楚要用什么环境。
+ */
+export async function mockImage(text, ledger = "") {
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return {
+    op: "none",
+    items: [],
+    ids: [],
+    reply:
+      "这是浏览器预览环境，识图要打包成 App、并启用一个支持图片的模型（如 gpt-4o / claude-3-5-sonnet / glm-4v）才能用。",
+  };
+}
+
 export async function mockTestConnection(settings) {
   await new Promise((resolve) => setTimeout(resolve, 600));
   if (!settings.baseUrl) {

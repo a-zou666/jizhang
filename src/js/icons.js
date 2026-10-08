@@ -48,9 +48,16 @@ export const ICONS = {
     <path d="M12 18.1v3.3" ${STROKE} />`,
   send: `<path d="M12 19.4V4.9" ${STROKE} /><path d="M5.9 11 12 4.9 18.1 11" ${STROKE} />`,
 
+  /* 对话 · 识图 */
+  image: `
+    <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="3.2" ${STROKE} />
+    <circle cx="8.7" cy="9.9" r="1.6" ${STROKE} />
+    <path d="M4.1 17.2l4.4-4.4a1.8 1.8 0 0 1 2.5 0l2.9 2.9 1.8-1.8a1.8 1.8 0 0 1 2.5 0l1.7 1.7" ${STROKE} />`,
+
   /* 通用 */
   close: `<path d="M6.2 6.2l11.6 11.6M17.8 6.2 6.2 17.8" ${STROKE} />`,
   chevronRight: `<path d="M9.2 5.2 16 12l-6.8 6.8" ${STROKE} />`,
+
   chevronLeft: `<path d="M14.8 5.2 8 12l6.8 6.8" ${STROKE} />`,
   check: `<path d="M4.8 12.6l5 5L19.2 6.6" ${STROKE} />`,
   trash: `

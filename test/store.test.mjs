@@ -203,3 +203,42 @@ describe("导入 / 导出的收口", () => {
     assert.ok(payload.settings.providers.every((item) => item.apiKey === "***"));
   });
 });
+
+describe("对话里的图片（识图记账）", () => {
+  const thumb = "data:image/jpeg;base64,THUMB";
+
+  it("消息里只存缩略图，非法 / 超大图片不入库", () => {
+    mod.clearChat();
+    mod.appendChat({ role: "user", text: "小票", kind: "text", state: "done", image: thumb });
+    assert.equal(mod.getChat()[0].image, thumb);
+
+    mod.appendChat({ role: "user", text: "假图", image: "javascript:alert(1)" });
+    mod.appendChat({ role: "user", text: "大图", image: `data:image/png;base64,${"A".repeat(50_000)}` });
+    assert.equal(mod.getChat()[1].image, "");
+    assert.equal(mod.getChat()[2].image, "");
+  });
+
+  it("缩略图只保留最近若干条，更早的消息文字照旧", () => {
+    mod.clearChat();
+    for (let i = 0; i < 40; i += 1) {
+      mod.appendChat({ role: "user", text: `第 ${i} 条`, kind: "text", state: "done", image: thumb });
+    }
+    const chat = mod.getChat();
+    assert.equal(chat.length, 40);
+    assert.equal(chat.filter((item) => item.image).length, 30);
+    assert.equal(chat[0].image, "");
+    assert.equal(chat[0].text, "第 0 条");
+    assert.equal(chat.at(-1).image, thumb);
+  });
+
+  it("清空对话把图片一起清掉，账目不受影响", () => {
+    mod.clearChat();
+    mod.addRecords([{ date: "2026-10-08", item: "鼠标", category: "数码", amount: 120 }]);
+    mod.appendChat({ role: "user", text: "小票", kind: "text", state: "done", image: thumb });
+    assert.equal(mod.getChat()[0].image, thumb);
+
+    mod.clearChat();
+    assert.deepEqual(mod.getChat(), []);
+    assert.equal(mod.getRecords().length, 1);
+  });
+});

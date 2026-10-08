@@ -55,6 +55,22 @@ const providers = [
   },
 ];
 
+/* 演示用的小票缩略图（真实渲染进气泡，不手工 P 图） */
+const receiptThumb = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="240">
+     <rect width="180" height="240" fill="#F2F4F7"/>
+     <rect x="16" y="18" width="148" height="204" rx="6" fill="#FFFFFF" stroke="#DFE3E8"/>
+     <text x="90" y="46" font-size="14" text-anchor="middle" fill="#111827">便利小票</text>
+     <line x1="30" y1="58" x2="150" y2="58" stroke="#E5E7EB"/>
+     <text x="30" y="82" font-size="11" fill="#374151">拿铁 × 1</text><text x="150" y="82" font-size="11" text-anchor="end" fill="#111827">32.00</text>
+     <text x="30" y="104" font-size="11" fill="#374151">三明治 × 1</text><text x="150" y="104" font-size="11" text-anchor="end" fill="#111827">18.50</text>
+     <text x="30" y="126" font-size="11" fill="#374151">纸巾 × 2</text><text x="150" y="126" font-size="11" text-anchor="end" fill="#111827">6.00</text>
+     <line x1="30" y1="142" x2="150" y2="142" stroke="#E5E7EB"/>
+     <text x="30" y="164" font-size="12" fill="#111827">合计</text><text x="150" y="164" font-size="12" text-anchor="end" fill="#DC2626">56.50</text>
+     <text x="90" y="196" font-size="9" text-anchor="middle" fill="#9CA3AF">2026-10-08 09:12</text>
+   </svg>`,
+)}`;
+
 const chat = [
   {
     id: "c1",
@@ -75,6 +91,29 @@ const chat = [
     items: [
       { id: "c2a", date: DAY(7), item: "电影票", category: "娱乐", amount: 78, createdAt: at(7, 20) },
       { id: "c2b", date: DAY(8), item: "咖啡", category: "餐饮", amount: 32, createdAt: at(8, 8) },
+    ],
+  },
+  {
+    id: "c2b",
+    role: "user",
+    text: "",
+    kind: "text",
+    items: [],
+    state: "done",
+    at: at(8, 10),
+    image: receiptThumb,
+  },
+  {
+    id: "c2c",
+    role: "assistant",
+    text: "从这张小票里读出 3 笔，确认后入账：",
+    kind: "add",
+    state: "pending",
+    at: at(8, 10),
+    items: [
+      { id: "c2d", date: DAY(8), item: "拿铁", category: "餐饮", amount: 32, createdAt: at(8, 9) },
+      { id: "c2e", date: DAY(8), item: "三明治", category: "餐饮", amount: 18.5, createdAt: at(8, 9) },
+      { id: "c2f", date: DAY(8), item: "纸巾", category: "日用", amount: 6, createdAt: at(8, 9) },
     ],
   },
   {
@@ -188,6 +227,9 @@ async function main() {
   await page.click('.tabbar__item[data-tab="chat"]');
   await page.waitForTimeout(500);
   await shoot(page, "chat", ".chat-row", 4);
+  await page.evaluate(() => document.querySelector(".chat-bubble__image")?.scrollIntoView({ behavior: "instant", block: "start" }));
+  await page.waitForTimeout(200);
+  await shoot(page, "chat-image", ".chat-bubble__image", 1);
 
   /* 设置页 */
   await page.click('.tabbar__item[data-tab="settings"]');

@@ -5,6 +5,7 @@ import { hydrateIcons } from "./icons.js";
 import {
   PROTOCOL_ORDER,
   PROTOCOL_PRESETS,
+  PROVIDER_PRESETS,
   activateProvider,
   addProvider,
   addProviderModels,
@@ -18,7 +19,7 @@ import {
   updateProvider,
 } from "./store.js";
 import { closeModal, confirmDialog, openModal, toast } from "./ui.js";
-import { el, escapeHtml } from "./util.js";
+import { buildEndpoint, el, escapeHtml } from "./util.js";
 
 /* ================= 一级：服务商列表 ================= */
 export function openModelManager(onClose = null) {
@@ -122,8 +123,17 @@ function openProviderEditor(id, onDone) {
         .join("")
     : "";
 
+  // 新增时才给预设：点一下把名称 / 协议 / 地址和这家常用模型一起带上
+  const presetBlock = editing
+    ? ""
+    : `<div class="mm-presets">
+         <span class="mm-field__label">常用服务商（点一下自动填）</span>
+         <div class="chip-row" id="pvPresetRow"></div>
+       </div>`;
+
   openModal(
     `<p class="modal-title">${editing ? "编辑服务商" : "添加服务商"}</p>
+     ${presetBlock}
      <div class="field-stack">
        <label class="mm-field">
          <span class="mm-field__label">名称</span>
@@ -139,14 +149,17 @@ function openProviderEditor(id, onDone) {
          </select>
        </label>
        <label class="mm-field">
-         <span class="mm-field__label">Base URL</span>
-         <input class="settings-input" id="pvUrl" type="url" inputmode="url" spellcheck="false"
-                autocapitalize="off" placeholder="https://api.deepseek.com" />
+         <span class="mm-field__label">接口地址</span>
+         <input class="settings-input" id="pvUrl" type="text" inputmode="url" spellcheck="false"
+                autocapitalize="off" autocorrect="off"
+                placeholder="https://open.bigmodel.cn/api/paas/v4" />
+         <span class="mm-field__hint" id="pvUrlHint"></span>
        </label>
        <label class="mm-field">
          <span class="mm-field__label">API Key</span>
          <input class="settings-input" id="pvKey" type="password" spellcheck="false"
                 autocapitalize="off" placeholder="sk-..." />
+         <span class="mm-field__hint" id="pvKeyHint"></span>
        </label>
        ${
          editing
@@ -176,6 +189,43 @@ function openProviderEditor(id, onDone) {
         panel.querySelector("#pvKey").value = current.apiKey;
         panel.querySelector("#pvName").focus();
 
+        // 选中的预设：保存时把它家的模型一起带进去
+        let picked = null;
+        const urlInput = panel.querySelector("#pvUrl");
+        const protocolInput = panel.querySelector("#pvProtocol");
+        const urlHint = panel.querySelector("#pvUrlHint");
+        const keyHint = panel.querySelector("#pvKeyHint");
+
+        // 地址怎么补全，直接当场显示出来，避免「填了却请求错地址」
+        const refreshHint = () => {
+          const value = urlInput.value.trim();
+          urlHint.textContent = value
+            ? `实际请求：${buildEndpoint(protocolInput.value, value.replace(/\/+$/, ""))}`
+            : "填基址（…/v1、…/api/v3）或完整地址（…/chat/completions）都行";
+        };
+        urlInput.addEventListener("input", refreshHint);
+        protocolInput.addEventListener("change", refreshHint);
+        refreshHint();
+
+        const presetRow = panel.querySelector("#pvPresetRow");
+        if (presetRow) {
+          const chips = PROVIDER_PRESETS.map((preset) => {
+            const chip = el("button", { class: "chip", type: "button", text: preset.name });
+            chip.addEventListener("click", () => {
+              picked = preset;
+              panel.querySelector("#pvName").value = preset.name;
+              protocolInput.value = preset.protocol;
+              urlInput.value = preset.baseUrl;
+              keyHint.textContent = preset.keyHint;
+              chips.forEach((item) => item.classList.toggle("is-selected", item === chip));
+              refreshHint();
+              toast(`${preset.name}：还差 API Key，模型已预置 ${preset.models.length} 个`, "ok");
+            });
+            return chip;
+          });
+          presetRow.replaceChildren(...chips);
+        }
+
         panel.querySelector("#pvCancel").addEventListener("click", closeModal);
 
         panel.querySelector("#pvSave").addEventListener("click", () => {
@@ -185,7 +235,7 @@ function openProviderEditor(id, onDone) {
           const apiKey = panel.querySelector("#pvKey").value.trim();
 
           if (!name) return toast("请填写服务商名称", "error");
-          if (!baseUrl) return toast("请填写 Base URL", "error");
+          if (!baseUrl) return toast("请填写接口地址", "error");
 
           if (editing) {
             const model = panel.querySelector("#pvModel")?.value.trim() ?? editing.model;
@@ -194,8 +244,20 @@ function openProviderEditor(id, onDone) {
             if (getSettings().activeProviderId === editing.id) activateProvider(editing.id);
             toast("已保存", "ok");
           } else {
-            addProvider({ name, protocol, baseUrl, apiKey, model: "", models: [] });
-            toast(`已添加 ${name}（在列表里点它即可启用）`, "ok");
+            addProvider({
+              name,
+              protocol,
+              baseUrl,
+              apiKey,
+              model: "",
+              models: picked?.models ?? [],
+            });
+            toast(
+              picked
+                ? `已添加 ${name}（预置 ${picked.models.length} 个模型，点右侧 ✨ 挑一个设为默认）`
+                : `已添加 ${name}（在列表里点它即可启用）`,
+              "ok",
+            );
           }
           closeModal();
         });

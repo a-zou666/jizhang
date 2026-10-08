@@ -371,7 +371,7 @@ if (appStarted) {
 
   // 对话页：三个 Tab + 消息流 + 输入区
   const tabs = [...documentStub.querySelectorAll(".tabbar__item")].map((n) => n.dataset.tab);
-  const chatIds = ["chatList", "chatInput", "chatSend", "chatScroll", "chatModel"];
+  const chatIds = ["chatList", "chatInput", "chatSend", "chatScroll", "chatModel", "chatImage", "chatFile", "chatAttach"];
   const missingChat = chatIds.filter((id) => !documentStub.getElementById(id));
   if (!tabs.includes("chat") || missingChat.length) {
     fail("对话页装配不完整", `tabs=${tabs.join("/")} 缺失=${missingChat.join(",")}`);
@@ -1067,6 +1067,73 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.replaceAll({ records: [], settings: {} });
 }
 
+/* --- 服务商预设 + 完整地址：智谱 / 豆包 / 混元一键填好，地址补全当场可见 --- */
+{
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const models = await import(new URL("../src/js/models.js", import.meta.url));
+  const panel = documentStub.getElementById("modalPanel");
+  store.replaceAll({ records: [], settings: {} });
+
+  const wanted = ["智谱", "豆包", "混元", "DeepSeek"];
+  const presets = store.PROVIDER_PRESETS ?? [];
+  const names = presets.map((item) => item.name);
+  const missing = wanted.filter((name) => !names.some((item) => item.includes(name)));
+  if (!presets.length || missing.length) {
+    fail("服务商预设不齐", `缺少 ${missing.join("/")}`);
+  } else ok(`服务商预设齐了 ${presets.length} 家：${names.join(" · ")}`);
+
+  const ark = presets.find((item) => item.name === "豆包（兼容入口）");
+  if (!ark || ark.baseUrl !== "https://ark.cn-beijing.volces.com/api/compatible") {
+    fail("方舟兼容入口地址不对", ark?.baseUrl);
+  } else ok("方舟兼容入口可直接填 https://ark.cn-beijing.volces.com/api/compatible");
+
+  // 打开「添加服务商」：预设 chip 点一下就把名称 / 地址 / 模型带上
+  models.openModelManager();
+  await settle();
+  panel.querySelector("#mmAdd").__listeners.get("click")[0]();
+  await settle();
+  const chips = panel.querySelector("#pvPresetRow")?.querySelectorAll(".chip") ?? [];
+  if (chips.length !== presets.length) {
+    fail("添加服务商里没有预设快选", String(panel.textContent).slice(0, 160));
+  } else ok(`添加服务商里有 ${chips.length} 个预设快选（点一下自动填）`);
+
+  const zhipuIndex = names.indexOf("智谱 GLM");
+  chips[zhipuIndex].__listeners.get("click")[0]();
+  await settle();
+  const filledUrl = panel.querySelector("#pvUrl").value;
+  const hint = String(panel.querySelector("#pvUrlHint").textContent ?? "");
+  if (filledUrl !== "https://open.bigmodel.cn/api/paas/v4" || !hint.includes("/api/paas/v4/chat/completions")) {
+    fail("预设没有填好地址 / 没显示补全后的地址", `${filledUrl} | ${hint}`);
+  } else ok(`点「智谱 GLM」自动填好地址，并显示实际请求：${hint.replace("实际请求：", "")}`);
+
+  // 填一个 Key 保存：模型被预置进去
+  panel.querySelector("#pvKey").value = "sk-test";
+  panel.querySelector("#pvSave").__listeners.get("click")[0]();
+  await settle();
+  const created = store.getProviders().at(-1);
+  const modelIds = (created?.models ?? []).map((item) => item.id);
+  if (created?.name !== "智谱 GLM" || !modelIds.includes("glm-4.6v-flash") || !modelIds.includes("glm-4.7-flash")) {
+    fail("按预设添加后模型没带进来", JSON.stringify({ name: created?.name, modelIds }));
+  } else ok(`按预设添加即带模型：${modelIds.slice(0, 4).join(" / ")} …（含识图用的 glm-4.6v-flash）`);
+
+  // 完整地址原样使用：粘 .../chat/completions 不再被拼歪
+  store.replaceAll({ records: [], settings: {} });
+  models.openModelManager();
+  await settle();
+  panel.querySelector("#mmAdd").__listeners.get("click")[0]();
+  await settle();
+  const urlInput = panel.querySelector("#pvUrl");
+  urlInput.value = "https://ark.cn-beijing.volces.com/api/compatible/v1/chat/completions";
+  urlInput.dispatch("input");
+  await settle();
+  const fullHint = String(panel.querySelector("#pvUrlHint").textContent ?? "");
+  if (!fullHint.includes("https://ark.cn-beijing.volces.com/api/compatible/v1/chat/completions")) {
+    fail("完整地址没有被原样使用", fullHint);
+  } else ok("完整地址原样使用：粘 .../chat/completions 不会再被拼上第二段");
+
+  store.replaceAll({ records: [], settings: {} });
+}
+
 /* --- 当月预算：填在首页「本月支出」旁边，按月覆盖默认预算 --- */
 {
   store.replaceAll({ records: [], settings: { budget: 2000 } });
@@ -1126,6 +1193,97 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.clearChat();
   if (store.getChat().length !== 0) fail("清空对话没有生效");
   else ok("「清空对话」只清聊天记录，不影响账目");
+}
+
+/* --- 识图记账：对话页选图 → 压缩 → 跟消息一起发给模型 --- */
+{
+  const chat = await import(new URL("../src/js/chat.js", import.meta.url));
+  const imageModule = await import(new URL("../src/js/image.js", import.meta.url));
+  const list = documentStub.getElementById("chatList");
+
+  // 浏览器 API 的最小替身：FileReader / Image / canvas
+  globalThis.FileReader = class {
+    readAsDataURL(file) {
+      this.result = file.__dataUrl ?? "data:image/jpeg;base64,AAAA";
+      setTimeout(() => this.onload?.(), 0);
+    }
+  };
+  globalThis.Image = class {
+    set src(_value) {
+      this.naturalWidth = 1600;
+      this.naturalHeight = 1200;
+      setTimeout(() => this.onload?.(), 0);
+    }
+  };
+  const realCreate = documentStub.createElement.bind(documentStub);
+  documentStub.createElement = (tag) => {
+    const node = realCreate(tag);
+    if (String(tag).toLowerCase() === "canvas") {
+      node.getContext = () => ({ drawImage() {} });
+      node.toDataURL = (type = "image/jpeg") => `data:${type};base64,COMPRESSED`;
+    }
+    return node;
+  };
+
+  const rejects = async (file) => {
+    try {
+      await imageModule.prepareImage(file);
+      return null;
+    } catch (error) {
+      return String(error?.message ?? error);
+    }
+  };
+
+  const pdfMessage = await rejects({ type: "application/pdf", size: 2048 });
+  const bigMessage = await rejects({ type: "image/jpeg", size: 20 * 1024 * 1024 });
+  if (!pdfMessage || !bigMessage) {
+    fail("非图片 / 超大图片没有被拦下", JSON.stringify({ pdfMessage, bigMessage }));
+  } else ok(`选图有把关：非图片（${pdfMessage}）、超大图（${bigMessage}）都被拒绝`);
+
+  const prepared = await imageModule.prepareImage({
+    type: "image/png",
+    size: 3 * 1024 * 1024,
+    name: "receipt.png",
+    __dataUrl: "data:image/png;base64,RAW",
+  });
+  if (
+    !prepared?.dataUrl.startsWith("data:image/") ||
+    !prepared?.thumb.startsWith("data:image/") ||
+    prepared?.mime !== "image/png"
+  ) {
+    fail("图片压缩结果不完整", JSON.stringify(prepared).slice(0, 160));
+  } else ok("图片压缩正常：送模型用大图、气泡显示用缩略图，MIME 一并带上");
+
+  // 只发图片、不打字：用户气泡显示缩略图，助理走识图分支
+  store.replaceAll({ records: [], settings: {} });
+  store.clearChat();
+  const shot = { dataUrl: "data:image/jpeg;base64,FULL", thumb: "data:image/jpeg;base64,THUMB", mime: "image/jpeg" };
+  await chat.sendMessage("", shot);
+
+  const bubbles = list.querySelectorAll(".chat-bubble__image");
+  const savedUser = store.getChat()[0];
+  if (bubbles.length !== 1 || savedUser?.image !== shot.thumb) {
+    fail("带图发送没有渲染缩略图", `bubbles=${bubbles.length} image=${savedUser?.image}`);
+  } else ok("只发图片也能发：用户气泡显示缩略图，历史里只存小图（原图不入库）");
+
+  const reply = list.querySelectorAll(".chat-row")[1]?.textContent ?? "";
+  if (!/图片|识图/.test(reply)) {
+    fail("带图发送没有走识图分支", reply.slice(0, 120));
+  } else ok("带图发送走识图分支（交给视觉模型读小票 / 支付截图）");
+
+  // 超大缩略图不入库，避免把本机存储撑爆
+  const huge = `data:image/jpeg;base64,${"A".repeat(50_000)}`;
+  store.clearChat();
+  store.appendChat({ role: "user", text: "x", kind: "text", state: "done", image: huge });
+  if (store.getChat()[0]?.image !== "") {
+    fail("超大图片没有在入库时被丢弃");
+  } else ok("超大缩略图入库时被丢弃：聊天历史不会把本机存储撑爆");
+
+  delete globalThis.FileReader;
+  delete globalThis.Image;
+  documentStub.createElement = realCreate;
+  store.replaceAll({ records: [], settings: {} });
+  store.clearChat();
 }
 
 /* --- 手动编辑必须能删掉：编辑弹窗自带删除 + 二次确认 --- */
