@@ -5,6 +5,7 @@ import { hydrateIcons } from "./icons.js";
 import { openModelManager } from "./models.js";
 import {
   addCategory,
+  APP_VERSION,
   categoryColor,
   clearRecords,
   exportPayload,
@@ -33,6 +34,10 @@ export function renderSettings() {
   $("#weekStartValue").textContent = settings.weekStart === 0 ? "周日" : "周一";
   $("#budgetValue").textContent = yuan(settings.budget);
   $("#categoryValue").textContent = `${settings.categories.length} 个分类`;
+
+  // 版本号来自 package.json（构建时注入），不再在 HTML 里写死
+  const version = $("#appVersion");
+  if (version) version.textContent = `App v${APP_VERSION}`;
 }
 
 /* ---------------- 事件绑定 ---------------- */

@@ -16,6 +16,18 @@ const STORAGE_KEY = "ai-ledger/v1";
 const RECOVERY_KEY = "ai-ledger/v1.recovered";
 const PALETTE_SIZE = 6;
 
+/**
+ * 应用版本号。构建时由 vite.config.js 从 package.json 注入（`__APP_VERSION__`），
+ * 未构建的环境（node --test / 直接跑源码）回退成占位，不硬编码具体版本。
+ */
+export const APP_VERSION = (() => {
+  try {
+    return typeof __APP_VERSION__ === "string" && __APP_VERSION__ ? __APP_VERSION__ : "0.0.0-dev";
+  } catch {
+    return "0.0.0-dev";
+  }
+})();
+
 export const DEFAULT_CATEGORIES = ["餐饮", "交通", "数码", "日用", "娱乐", "其他"];
 
 /** 协议预设：切换协议类型时套用默认 Base URL */
@@ -844,7 +856,7 @@ export function removeCategory(name) {
 export function exportPayload() {
   return {
     app: "ai-ledger",
-    version: "0.1.0",
+    version: APP_VERSION,
     exportedAt: new Date().toISOString(),
     // 导出不泄露任何 Key：当前连接的 Key 与每个服务商的 Key 都要脱敏
     settings: {

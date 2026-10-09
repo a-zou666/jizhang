@@ -26,9 +26,6 @@ dist-ssr
 # Agent / tooling data
 .workbuddy/
 
-# 过程文档：只留在本地，不进仓库
-UPDATE_SUMMARY.md
-
 # 构建产物与签名材料（别误提交）
 *.apk
 *.aab
