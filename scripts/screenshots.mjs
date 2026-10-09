@@ -288,6 +288,15 @@ async function main() {
   await page.waitForTimeout(500);
   await shoot(page, "settings", "#rowModels", 1);
 
+  /* 账单页：日期区间 + 区间合计 + 分类构成 + 逐条明细 */
+  await page.click('.tabbar__item[data-tab="bills"]');
+  await page.waitForTimeout(500);
+  await shoot(page, "bills", ".bills-cat", 2);
+
+  /* 回到设置页 → 模型管理 */
+  await page.click('.tabbar__item[data-tab="settings"]');
+  await page.waitForTimeout(400);
+
   /* 设置 → 模型管理 */
   await page.click("#rowModels");
   await page.waitForTimeout(500);

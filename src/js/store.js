@@ -521,6 +521,41 @@ export function dailyTotals(date) {
   return map;
 }
 
+/**
+ * 账目按日期区间过滤（供「账单页」统计用）。
+ * YYYY-MM-DD 可直接字符串比较；空端点表示不限。
+ * 结果按日期倒序（同一天按记账时间倒序），最新的排在最前面。
+ */
+export function recordsInRange(records, start, end) {
+  return (records ?? [])
+    .filter((record) => {
+      if (start && record.date < start) return false;
+      if (end && record.date > end) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+    });
+}
+
+/** 按分类汇总金额（降序）并算出占总支出的百分比 */
+export function sumByCategory(records) {
+  const totals = new Map();
+  let sum = 0;
+  for (const record of records ?? []) {
+    totals.set(record.category, (totals.get(record.category) ?? 0) + record.amount);
+    sum += record.amount;
+  }
+  return [...totals.entries()]
+    .map(([category, amount]) => ({
+      category,
+      amount: round2(amount),
+      percent: sum > 0 ? (amount / sum) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
 /* ---------------- 写入 ---------------- */
 export function addRecords(list) {
   const added = list.map(sanitizeRecord).filter(Boolean);

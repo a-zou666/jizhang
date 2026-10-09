@@ -33,6 +33,14 @@ export const ICONS = {
   chatFilled: `
     <path d="M12 3.6c4.66 0 8.4 3.32 8.4 7.42 0 1.5-.51 2.9-1.4 4.08.3.9.72 1.9 1.14 2.83.3.66-.4 1.36-1.06 1.08l-3.3-1.4c-.86.24-1.77.37-2.72.37-4.65 0-8.4-3.32-8.4-7.42C4.66 6.92 7.4 3.6 12 3.6Z" fill="currentColor" />`,
 
+  /* 导航 · 账单 */
+  billsOutline: `
+    <rect x="4.6" y="2.9" width="14.8" height="18.2" rx="3.2" ${STROKE} />
+    <path d="M8.4 8.1h7.2M8.4 12h7.2M8.4 15.9h4.6" ${STROKE} />`,
+  billsFilled: `
+    <rect x="4.6" y="2.9" width="14.8" height="18.2" rx="3.2" fill="currentColor" />
+    <path d="M8.4 8.1h7.2M8.4 12h7.2M8.4 15.9h4.6" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" />`,
+
   /* 首页 · 今天 */
   calendarToday: `
     <rect x="3.25" y="4.9" width="17.5" height="16" rx="3.4" ${STROKE} />
@@ -99,6 +107,7 @@ export function navIcon(tab, active) {
   const size = active ? 24 : 22;
   if (tab === "home") return icon(active ? "calendarFilled" : "calendarOutline", { size });
   if (tab === "chat") return icon(active ? "chatFilled" : "chatOutline", { size });
+  if (tab === "bills") return icon(active ? "billsFilled" : "billsOutline", { size });
   return icon(active ? "settingsFilled" : "settingsOutline", { size });
 }
 

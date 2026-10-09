@@ -1151,6 +1151,96 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.replaceAll({ records: [], settings: {} });
 }
 
+/* --- 账单页：日期区间（默认本月开头 → 今天）+ 合计 + 分类构成 + 逐条明细 --- */
+{
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const bills = await import(new URL("../src/js/bills.js", import.meta.url));
+
+  const pad = (n) => String(n).padStart(2, "0");
+  const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  const todayKey = keyOf(now);
+  const tomorrow = new Date(now.getTime());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = keyOf(tomorrow);
+
+  // 底部导航：账单夹在「对话」和「设置」之间
+  const tabOrder = [...documentStub.querySelectorAll(".tabbar__item")].map((n) => n.dataset.tab);
+  if (tabOrder.join("/") !== "home/chat/bills/settings") {
+    fail("底部导航顺序不对（账单应在对话与设置之间）", tabOrder.join("/"));
+  } else ok("底部导航：首页 / 对话 / 账单 / 设置（账单在对话与设置之间）");
+
+  if (!iconModule.navIcon("bills", true) || !iconModule.navIcon("bills", false)) {
+    fail("账单的导航图标渲染不出来");
+  } else ok("账单导航图标（选中 / 未选）都能渲染");
+
+  store.replaceAll({
+    records: [
+      { id: "b1", date: `${thisMonth}-01`, item: "早餐", category: "餐饮", amount: 20, createdAt: Date.now() },
+      { id: "b2", date: `${thisMonth}-02`, item: "地铁", category: "交通", amount: 6, createdAt: Date.now() },
+      { id: "b3", date: `${thisMonth}-03`, item: "电影", category: "娱乐", amount: 78, createdAt: Date.now() },
+      { id: "b4", date: "2020-01-01", item: "老账", category: "其他", amount: 999, createdAt: Date.now() },
+    ],
+    settings: {},
+  });
+  bills.renderBills();
+  await settle();
+
+  const startInput = documentStub.getElementById("billsStart");
+  const endInput = documentStub.getElementById("billsEnd");
+  if (startInput.value !== `${thisMonth}-01` || endInput.value !== todayKey) {
+    fail("账单页默认区间不是「本月开头 → 今天」", `${startInput.value} ~ ${endInput.value}`);
+  } else ok(`账单页默认区间 = 本月开头 → 今天（${startInput.value} ~ ${endInput.value}）`);
+
+  const totalText = String(documentStub.getElementById("billsTotal").textContent ?? "");
+  if (totalText !== "¥104") {
+    fail("区间合计不对（本月 3 笔应为 ¥104，不该算 2020 年老账）", totalText);
+  } else ok("区间合计只算区间内的账目：¥104（2020 年老账被排除）");
+
+  const catRows = documentStub.getElementById("billsCats").querySelectorAll(".bills-cat");
+  if (catRows.length !== 3) {
+    fail("分类构成行数不对（应为 3 个分类）", `实际 ${catRows.length}`);
+  } else ok("分类构成列出 3 个分类，并按金额降序");
+
+  const recordRows = documentStub.getElementById("billsList").querySelectorAll(".bills-record");
+  if (recordRows.length !== 3) {
+    fail("消费明细行数不对（应为 3 笔）", `实际 ${recordRows.length}`);
+  } else ok("消费明细列出区间内 3 笔");
+
+  const metaText = String(recordRows[0]?.textContent ?? "");
+  if (!/餐饮|娱乐|交通/.test(metaText) || !/\d{2}:\d{2}/.test(metaText)) {
+    fail("明细行没带上「分类 · 日期 时间」", metaText);
+  } else ok(`明细行带分类与记账时间：「${metaText}」`);
+
+  // 改开始日期：区间变了要立刻重算
+  startInput.value = `${thisMonth}-03`;
+  startInput.dispatch("change");
+  await settle();
+  const afterText = String(documentStub.getElementById("billsTotal").textContent ?? "");
+  if (afterText !== "¥78") {
+    fail("改开始日期后没有重算", afterText);
+  } else ok("改开始日期即重算：只剩 3 号那笔 ¥78");
+
+  // 开始晚于结束：自动把结束带过去，区间不会变成空的
+  startInput.value = tomorrowKey;
+  startInput.dispatch("change");
+  await settle();
+  if (String(endInput.value ?? "") !== tomorrowKey) {
+    fail("开始晚于结束日期时没有同步结束日期", String(endInput.value ?? ""));
+  } else ok("开始晚于结束日期：结束日期被同步到同一天，区间不会为空");
+
+  // 快捷区间：点「本月」回到默认
+  const monthChip = documentStub.getElementById("billsPresets").querySelectorAll(".chip")[0];
+  monthChip.__listeners.get("click")[0]();
+  await settle();
+  if (String(documentStub.getElementById("billsStart").value ?? "") !== `${thisMonth}-01`) {
+    fail("点「本月」没把区间恢复成本月开头", String(documentStub.getElementById("billsStart").value ?? ""));
+  } else ok("快捷区间「本月」一键恢复：本月开头 → 今天");
+
+  store.replaceAll({ records: [], settings: {} });
+}
+
 /* --- 服务商预设 + 完整地址：智谱 / 豆包 / 混元一键填好，地址补全当场可见 --- */
 {
   const settle = () => new Promise((resolve) => setTimeout(resolve, 5));

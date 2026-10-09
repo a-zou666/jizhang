@@ -2033,6 +2033,207 @@ a {
 }
 
 /* ============ 对话页 ============ */
+/* ============================================================
+   账单页：日期区间（默认本月开头 → 今天）+ 区间合计 + 分类构成 + 逐条明细
+   ============================================================ */
+.bills-header {
+  position: relative;
+  padding: calc(var(--space-4) + var(--safe-area-top)) var(--density-pad) var(--space-3);
+  background: var(--bg-secondary);
+}
+
+.bills-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.bills-header__hint {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  line-height: var(--leading-relaxed);
+}
+
+/* 日期区间：开始 / 结束各一个输入框，中间用箭头连起来 */
+.bills-range__row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.bills-range__field {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.bills-range__label {
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.bills-range__arrow {
+  flex-shrink: 0;
+  padding-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-placeholder);
+}
+
+/* 区间合计 */
+.bills-sum {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  text-align: center;
+}
+
+.bills-sum__caption {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.bills-sum__amount {
+  margin: 0;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+}
+
+.bills-sum__meta {
+  color: var(--text-tertiary);
+}
+
+/* 分类构成：色点 + 分类名 + 占比 + 金额 + 占比条 */
+.bills-cats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.bills-cat {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.bills-cat__dot {
+  flex-shrink: 0;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--radius-full);
+}
+
+.bills-cat__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bills-cat__percent {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.bills-cat__amount {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+/* 占比条占满整行，单独放在第二排 */
+.bills-cat__track {
+  grid-column: 1 / -1;
+  height: 0.375rem;
+  overflow: hidden;
+  background: var(--surface-active);
+  border-radius: var(--radius-full);
+}
+
+.bills-cat__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width var(--duration-fast) var(--ease-out);
+}
+
+/* 逐条明细 */
+.bills-records {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bills-record {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.bills-record:last-child {
+  border-bottom: none;
+}
+
+.bills-record__dot {
+  flex-shrink: 0;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--radius-full);
+}
+
+.bills-record__main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bills-record__item {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bills-record__meta {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.bills-record__amount {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+/* 空态 */
+.bills-empty {
+  padding: var(--space-4) 0;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+  list-style: none;
+}
+
 .chat-header {
   position: relative;
   padding: calc(var(--space-4) + var(--safe-area-top)) var(--space-4) var(--space-2);

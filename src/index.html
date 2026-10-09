@@ -204,6 +204,61 @@
         </section>
 
         <!-- ================================================================
+             账单页：按日期区间看总支出、各分类金额与逐条明细
+             ================================================================ -->
+        <section class="page" data-page="bills" id="page-bills" aria-label="账单">
+          <header class="bills-header">
+            <div class="bills-header__row">
+              <h1 class="t-hero">账单</h1>
+            </div>
+            <p class="bills-header__hint" id="billsRangeText">—</p>
+          </header>
+
+          <div class="page-body">
+            <!-- 日期区间：默认本月 1 号 → 今天，可分别改开始 / 结束 -->
+            <section class="panel bills-range glass-sheen soft-glass">
+              <div class="bills-range__row">
+                <label class="bills-range__field">
+                  <span class="bills-range__label">开始</span>
+                  <input class="settings-input" id="billsStart" type="date" aria-label="开始日期" />
+                </label>
+                <span class="bills-range__arrow" aria-hidden="true">→</span>
+                <label class="bills-range__field">
+                  <span class="bills-range__label">结束</span>
+                  <input class="settings-input" id="billsEnd" type="date" aria-label="结束日期" />
+                </label>
+              </div>
+              <div class="chip-row" id="billsPresets"></div>
+            </section>
+
+            <!-- 区间合计 -->
+            <section class="panel bills-sum glass-sheen soft-glass">
+              <span class="bills-sum__caption">区间支出</span>
+              <p class="bills-sum__amount t-numeric" id="billsTotal">¥0</p>
+              <p class="bills-sum__meta t-footnote" id="billsCount"></p>
+            </section>
+
+            <!-- 各分类分别花了多少 -->
+            <section class="panel bills-cats-panel glass-sheen soft-glass">
+              <header class="panel__head">
+                <h2 class="panel__title t-title3">分类构成</h2>
+                <span class="panel__count t-footnote" id="billsCatCount"></span>
+              </header>
+              <div class="bills-cats" id="billsCats"></div>
+            </section>
+
+            <!-- 逐条明细：分类 / 日期 / 时间 / 金额 -->
+            <section class="panel bills-records-panel glass-sheen soft-glass">
+              <header class="panel__head">
+                <h2 class="panel__title t-title3">消费明细</h2>
+                <span class="panel__count t-footnote" id="billsListCount"></span>
+              </header>
+              <ul class="bills-records" id="billsList"></ul>
+            </section>
+          </div>
+        </section>
+
+        <!-- ================================================================
              对话页：跟 AI 聊天式记账
              ================================================================ -->
         <section class="page" data-page="chat" id="page-chat" aria-label="对话">
@@ -262,6 +317,10 @@
           <button class="tabbar__item" data-tab="chat" type="button">
             <span class="tabbar__icon" data-tab-icon="chat" aria-hidden="true"></span>
             <span class="tabbar__label">对话</span>
+          </button>
+          <button class="tabbar__item" data-tab="bills" type="button">
+            <span class="tabbar__icon" data-tab-icon="bills" aria-hidden="true"></span>
+            <span class="tabbar__label">账单</span>
           </button>
           <button class="tabbar__item" data-tab="settings" type="button">
             <span class="tabbar__icon" data-tab-icon="settings" aria-hidden="true"></span>

@@ -20,6 +20,7 @@
 
 - **对话式记账**：独立的「对话」页，像豆包 / 元宝那样聊天；AI 识别后在对话里给出账目卡片，点「确认入账」落账
 - **日历记账**：月支出概览与预算进度、每日金额小字、左右滑动或按钮翻月（可看历史）
+- **账单统计**：底部「账单」页按日期区间查账（默认本月开头 → 今天，开始 / 结束都能改，另有本月 / 上月 / 近 7 天 / 近 30 天 / 全部快捷区间），上方是区间总支出与日均，中间是各分类分别花了多少（带占比条），下方逐条列出分类 / 日期 / 时间 / 金额
 - **iOS 毛玻璃**：真正的 backdrop-blur 磨砂面板，彩色渐变底衬
 - **明细管理**：左滑删除、长按编辑、数据本地存储（不上云）
 - **识图记账**：对话页可以直接发小票 / 账单 / 支付截图，视觉模型自己读出每一笔（需支持图片的模型）
@@ -30,17 +31,21 @@
 
 下面每张都是 `node scripts/screenshots.mjs` 真实跑 App 截出来的（无头 Chromium，390×844 手机视口），不是设计稿。
 
-| 首页 · 日历记账 | 对话页 · AI 记账 | 设置页 |
+| 首页 · 日历记账 | 对话页 · AI 记账 | 账单页 · 区间统计 |
 | --- | --- | --- |
-| ![首页](docs/screenshots/home.png) | ![对话页](docs/screenshots/chat.png) | ![设置页](docs/screenshots/settings.png) |
+| ![首页](docs/screenshots/home.png) | ![对话页](docs/screenshots/chat.png) | ![账单页](docs/screenshots/bills.png) |
+
+| 设置页 | 模型管理 | 服务商的模型列表 |
+| --- | --- | --- |
+| ![设置页](docs/screenshots/settings.png) | ![模型管理](docs/screenshots/model-manager.png) | ![模型列表](docs/screenshots/model-list.png) |
 
 | 对话里的账目卡片 | 识图记账（发小票） | 记一笔 |
 | --- | --- | --- |
 | ![账目卡片](docs/screenshots/chat-card.png) | ![识图记账](docs/screenshots/chat-image.png) | ![记一笔](docs/screenshots/quick-add.png) |
 
-| 编辑 / 删除 | 模型管理 | 服务商的模型列表 |
-| --- | --- | --- |
-| ![编辑记录](docs/screenshots/edit-record.png) | ![模型管理](docs/screenshots/model-manager.png) | ![模型列表](docs/screenshots/model-list.png) |
+| 编辑 / 删除 |
+| --- |
+| ![编辑记录](docs/screenshots/edit-record.png) |
 
 ## 下载
 
@@ -51,8 +56,8 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 设置页 → **模型管理**：
 
 1. **添加服务商**：可以直接点预设（智谱 GLM / 豆包 / 混元 / DeepSeek / 通义千问…），也可以手填：名称 + 协议 + 接口地址 + API Key
-2. **添加模型**：手动填模型 ID，或「从 API 拉取」后勾选加入
-3. **启用**：点列表里的服务商即启用，它的地址 / Key / 默认模型写入当前连接
+2. **拉取 / 添加模型**：点服务商右侧「设置」，手动填模型 ID，或「从 API 拉取」—— 拉到的模型全部进入可选池，不做筛选
+3. **选当前用哪个模型**：在「对话」页顶部胶囊点开，列出所有已拉取的模型，点一个即切换（地址 / Key 跟着切到它所属的服务商）
 
 服务商与模型都只保存在本机，全部由你手动增删改——不会自动建档、也不会自动切换。
 

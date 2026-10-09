@@ -1,5 +1,6 @@
 /** 应用入口：装配状态、视图与事件 */
 
+import { bindBills, renderBills } from "./bills.js";
 import { bindCalendarNav, bindCalendarSwipe } from "./calendar.js";
 import { bindChat, renderChat } from "./chat.js";
 import { bindConfirmSheet } from "./confirm.js";
@@ -18,6 +19,7 @@ load();
 onStorageError(reportStorageProblem);
 hydrateIcons();
 bindConfirmSheet();
+bindBills();
 bindSettings();
 bindChat({ onNeedSettings: () => switchTab("settings") });
 bindCalendarSwipe();
@@ -32,6 +34,7 @@ switchTab(view.tab, { force: true });
 /* ---------------- 渲染 ---------------- */
 function renderAll() {
   renderHome();
+  renderBills();
   renderChat();
   renderSettings();
 }
