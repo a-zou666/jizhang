@@ -89,6 +89,19 @@ function run(bin, args, env) {
   return execFileSync(bin, args, { stdio: "pipe", env: { ...process.env, ...env } });
 }
 
+/** 把 apksigner 的证书摘要压成一行（不同版本 / 平台的措辞不一样，宽松取） */
+export function describeCert(output) {
+  const text = String(output ?? "");
+  const schemes = [];
+  if (/scheme \(APK Signature Scheme v2\):\s*true/i.test(text)) schemes.push("v2");
+  if (/scheme \(APK Signature Scheme v3\):\s*true/i.test(text)) schemes.push("v3");
+  const sha256 = /SHA-?256[^:]*:\s*([0-9a-fA-F]{16,})/.exec(text)?.[1];
+  const parts = [];
+  if (schemes.length) parts.push(`签名方案 ${schemes.join(" + ")}`);
+  if (sha256) parts.push(`证书 SHA-256 ${sha256.slice(0, 16)}…`);
+  return parts.length ? parts.join("，") : "已签名";
+}
+
 /* ------------------------------------------------------------------ *
  * 自检
  * ------------------------------------------------------------------ */
@@ -114,6 +127,20 @@ function selfTest() {
     signedName("app-arm64-release.apk"),
     "app-arm64-release.signed.apk",
   );
+  check(
+    "证书摘要：v2 + v3 + 指纹",
+    describeCert(
+      [
+        "Verifies",
+        "Verified using v1 scheme (JAR signing): false",
+        "Verified using v2 scheme (APK Signature Scheme v2): true",
+        "Verified using v3 scheme (APK Signature Scheme v3): true",
+        "Signer #1 certificate SHA-256 digest: 0cf4b3d0ea04ec16378359c62d426eb",
+      ].join("\n"),
+    ),
+    "签名方案 v2 + v3，证书 SHA-256 0cf4b3d0ea04ec16…",
+  );
+  check("证书摘要：读不出来时兜底", describeCert(""), "已签名");
 
   let failed = 0;
   for (const item of cases) {
@@ -205,13 +232,12 @@ function main() {
     rmSync(apk, { force: true });
     rmSync(aligned, { force: true });
 
-    const cert = run(apksigner, ["verify", "--print-certs", out]).toString();
-    const sha256 = /SHA-256\s*:\s*([0-9a-fA-F:]+)/.exec(cert)?.[1] ?? "?";
-    console.log(`  ✓ ${basename(out)} 已签名（证书 SHA-256: ${sha256.slice(0, 32)}…）`);
+    const cert = run(apksigner, ["verify", "--verbose", "--print-certs", out]).toString();
+    console.log(`  ✓ ${basename(out)} 已签名（${describeCert(cert)}）`);
   }
 
   rmSync(tmp, { recursive: true, force: true });
-  console.log(`[sign-apk] 完成：${apks.length} 个 APK 已签名（v1 + v2）`);
+  console.log(`[sign-apk] 完成：${apks.length} 个 APK 已签名`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
