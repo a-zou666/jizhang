@@ -3,7 +3,7 @@
 import { hasBackend, parseImage, parseIntent } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
 import { icon } from "./icons.js";
-import { prepareImages } from "./image.js";
+import { prepareImages, snapshotFiles } from "./image.js";
 import { openModelPicker } from "./models.js";
 import {
   addRecords,
@@ -85,7 +85,7 @@ function renderAttach() {
 
 /** 选完图：批量压缩 + 生成缩略图，失败只提示不打断输入 */
 async function onPickImages(fileList) {
-  const files = Array.from(fileList && fileList.length ? fileList : []);
+  const files = snapshotFiles(fileList);
   if (!files.length) return;
   const room = MAX_PENDING_IMAGES - pendingImages.length;
   if (room <= 0) {
@@ -93,9 +93,13 @@ async function onPickImages(fileList) {
     return;
   }
   try {
-    const prepared = await prepareImages(files.slice(0, room));
-    setPendingImages([...pendingImages, ...prepared]);
+    const { images, errors } = await prepareImages(files.slice(0, room));
+    setPendingImages([...pendingImages, ...images]);
     haptic(8);
+    if (errors.length) {
+      console.error(errors[0]);
+      toast(`有 ${errors.length} 张没读出来：${errors[0]?.message ?? "格式不支持"}`, "error");
+    }
   } catch (error) {
     console.error(error);
     toast(error?.message ?? "图片读取失败", "error");
@@ -439,9 +443,13 @@ export function bindChat({ onNeedSettings } = {}) {
   if (imageBtn && fileInput) {
     imageBtn.addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", async () => {
-      const files = fileInput.files;
+      // 顺序很关键：必须先把 FileList 拷成数组，再清空 input。
+      // `input.value = ""` 会立刻把同一个 FileList 清空，若先清空再读就只剩空列表，
+      // 结果就是「选完图界面毫无反应」且不报错。
+      const files = snapshotFiles(fileInput.files);
       fileInput.value = "";
-      if (files && files.length) await onPickImages(files);
+      // 清空 value 在部分浏览器会再触发一次 change，那时 files 为空（或用户取消选择），静默忽略
+      if (files.length) await onPickImages(files);
     });
     clearPendingImages();
   }

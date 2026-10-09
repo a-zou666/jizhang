@@ -56,6 +56,21 @@ export function isImageFile(file) {
 }
 
 /**
+ * 从 <input type="file"> 的 change 事件里安全取出文件。
+ *
+ * 必须先把 FileList 拷成数组再清空 input：执行 `input.value = ""` 会立刻把
+ * 同一个 FileList 清空（Chromium / Android WebView 都是这个行为），之后再读
+ * 只剩空列表 —— 表现就是「选完图什么都没发生」，而且没有任何报错。
+ *
+ * 返回的数组是快照，与 input 之后的状态无关。
+ * @param {FileList|File[]|null} fileList
+ * @returns {File[]}
+ */
+export function snapshotFiles(fileList) {
+  return Array.from(fileList ?? []).filter((file) => file && typeof file === "object");
+}
+
+/**
  * 把一个 File 变成可直接发送的图片对象
  * @returns {Promise<{dataUrl: string, thumb: string, mime: string, name: string}>}
  */
@@ -76,14 +91,24 @@ export async function prepareImage(file) {
 
 /**
  * 批量把多个 File 变成可发送的图片对象（每张独立压缩 / 生成缩略图）。
- * 任何一张不合法都会抛错，由调用方决定是整批失败还是挑出能用的。
- * @returns {Promise<Array<{dataUrl: string, thumb: string, mime: string, name: string}>>}
+ *
+ * 逐张独立处理：某一张读不出来（格式怪 / 太大 / 解码失败）只作废这一张，
+ * 不会连累同批其它图片 —— 一次选了 5 张里有 1 张坏掉，照样能发剩下 4 张。
+ * @returns {Promise<{images: Array, errors: Error[]}>}
  */
 export async function prepareImages(files) {
-  const list = Array.from(files ?? []);
+  const list = snapshotFiles(files);
   if (!list.length) throw new Error("没有选到图片");
-  const prepared = await Promise.all(list.map((file) => prepareImage(file)));
-  return prepared.filter(Boolean);
+
+  const settled = await Promise.allSettled(list.map((file) => prepareImage(file)));
+  const images = [];
+  const errors = [];
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled" && outcome.value) images.push(outcome.value);
+    else if (outcome.status === "rejected") errors.push(outcome.reason);
+  }
+  if (!images.length) throw errors[0] ?? new Error("没有选到图片");
+  return { images, errors };
 }
 
 export const __testing = { FULL_EDGE, THUMB_EDGE, isImageFile };

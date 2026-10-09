@@ -179,8 +179,8 @@ export async function mockImage(text, ledger = "") {
     items: [],
     ids: [],
     reply:
-      "识图需要「打包后的 App + 一个支持图片输入的模型」。当前浏览器预览没有后端，所以发不出图片。" +
-      "在 App 里请到「对话」页顶部胶囊切到支持识图的模型（如 glm-4.6v-flash、doubao-seed-2-0-mini-260428、hy-vision-2.0-instruct）再发。",
+      "识图要走打包后的 App：当前是浏览器预览，没有后端，图片发不出去。" +
+      "在 App 里点输入框左边的图片按钮选小票 / 支付截图，选好直接发送即可。",
   };
 }
 

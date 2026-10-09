@@ -33,19 +33,19 @@
 
 | 首页 · 日历记账 | 对话页 · AI 记账 | 账单页 · 环形图区间统计 |
 | --- | --- | --- |
-| ![首页](docs/screenshots/home.png?v=3) | ![对话页](docs/screenshots/chat.png?v=3) | ![账单页](docs/screenshots/bills.png?v=3) |
+| ![首页](docs/screenshots/home.png?v=4) | ![对话页](docs/screenshots/chat.png?v=4) | ![账单页](docs/screenshots/bills.png?v=4) |
 
 | 账单页 · 按分类筛选 | 设置页 | 模型管理 |
 | --- | --- | --- |
-| ![分类筛选](docs/screenshots/bills-filter.png?v=3) | ![设置页](docs/screenshots/settings.png?v=3) | ![模型管理](docs/screenshots/model-manager.png?v=3) |
+| ![分类筛选](docs/screenshots/bills-filter.png?v=4) | ![设置页](docs/screenshots/settings.png?v=4) | ![模型管理](docs/screenshots/model-manager.png?v=4) |
 
 | 已拉取的模型（多选删除） | 从 API 拉取（搜索 + 勾选） | 识图记账（发小票） |
 | --- | --- | --- |
-| ![模型列表](docs/screenshots/model-list.png?v=3) | ![拉取选择框](docs/screenshots/model-fetch.png?v=3) | ![识图记账](docs/screenshots/chat-image.png?v=3) |
+| ![模型列表](docs/screenshots/model-list.png?v=4) | ![拉取选择框](docs/screenshots/model-fetch.png?v=4) | ![识图记账](docs/screenshots/chat-image.png?v=4) |
 
 | 对话里的账目卡片 | 记一笔 | 编辑 / 删除 |
 | --- | --- | --- |
-| ![账目卡片](docs/screenshots/chat-card.png?v=3) | ![记一笔](docs/screenshots/quick-add.png?v=3) | ![编辑记录](docs/screenshots/edit-record.png?v=3) |
+| ![账目卡片](docs/screenshots/chat-card.png?v=4) | ![记一笔](docs/screenshots/quick-add.png?v=4) | ![编辑记录](docs/screenshots/edit-record.png?v=4) |
 
 ## 下载
 
@@ -88,9 +88,11 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 对话页输入框左边是图片按钮：可以一次选多张小票 / 账单 / 支付截图（最多 9 张），直接发送（也可以补一句话），
 视觉模型会自己读出每一笔，回来还是同一张「确认入账 / 忽略」卡片。
 
-- 需要启用一个**支持图片输入**的模型（如 `glm-4.6v-flash`、`doubao-seed-2-0-mini-260428`、`hy-vision-2.0-instruct`）；
-  用纯文本模型（如 `doubao-seed-evolving`、`deepseek-chat`）发图会被服务端拒掉，App 会提示你换模型并附上服务端原文；
+- 需要启用一个**支持图片输入**的模型（如 `glm-4.6v-flash`、`doubao-seed-2-0-mini-260428`、`hy-vision-2.0-instruct`）。
+  只有当服务端明确表示「这个模型吃不了图片」时，App 才会提示换视觉模型并附上服务端原文；
+  Key 错、额度用完、地址错、超时这类失败按原文如实报出，不会一律归咎于模型；
 - 图片在本机压缩（最长边 1280）后再送模型，聊天记录里只留小缩略图（单条最多 12 张、最近 30 条带图消息保留），原图不入库；
+- 一次选多张时，某张读不出来（格式怪 / 太大 / 解码失败）只作废这一张，其余照常发出，并提示有几张没读出来；
 - 清空对话会把这些缩略图一起清掉。
 
 ## 开发

@@ -83,22 +83,43 @@ function describeIntentError(error) {
 }
 
 /**
- * 把「识图失败」翻译成一句能直接照着做的话。
- * 最常见的失败是：当前模型是纯文本模型（如 doubao-seed-evolving、deepseek-chat），
- * 服务端会直接拒掉带图的请求 —— 这种情况光报 HTTP 错误用户看不懂，得告诉他换模型。
- * 其余情况保留服务端原文，方便排查（Key 错、地址错、额度用完等）。
+ * 服务端明确表示「这个模型吃不了图片」的说法。
+ *
+ * 这里必须收得很紧：HTTP 400 不等于模型不支持识图 —— Key 错、额度用完、参数非法
+ * 同样返回 400。早先用「只要出现 400 或 image 字样就算不支持」的宽判断，
+ * 把一堆跟图片无关的失败都报成了「模型不支持识图」，属于误诊。
  */
-function describeImageError(error, model) {
+const IMAGE_UNSUPPORTED_PATTERNS = [
+  /not\s+support(?:ed)?[^.\n]{0,40}\b(image|images|vision|multimodal|photo)/i,
+  /\b(image|images|vision|multimodal)\b[^.\n]{0,40}not\s+support(?:ed)?\b/i,
+  /\bunsupported\b[^.\n]{0,24}\b(image|images|vision|multimodal)\b/i,
+  /\b(image|images|vision|multimodal)\b[^.\n]{0,24}\bunsupported\b/i,
+  /invalid\s+image|unsupported\s+image|image_url[^.\n]{0,24}not\s+support(?:ed)?/i,
+  /vision[-_ ]?(model|capability|input)\s+(is\s+)?required/i,
+  /(text[-_ ]only|non[-_ ]vision)\s+model/i,
+  /(不支持|无法识别|无法处理|不接收)[^。\n]{0,12}(图片|图像|视觉|多模态)/,
+  /(图片|图像|视觉|多模态)[^。\n]{0,12}(不支持|不可用|无法识别)/,
+];
+
+/** 是否命中「模型确实不支持图片」 */
+export function isImageUnsupported(message) {
+  const raw = String(message ?? "");
+  return IMAGE_UNSUPPORTED_PATTERNS.some((pattern) => pattern.test(raw));
+}
+
+/**
+ * 把「识图失败」翻译成一句能直接照着做的话。
+ *
+ * 只有服务端明确说了图片能力相关的话，才提示换视觉模型；其余一律原样透出
+ * 服务端原文（Key 错、地址错、额度、超时各有各的查法，不能一句「换模型」糊过去）。
+ */
+export function describeImageError(error, model) {
   const raw = String(error?.message ?? error ?? "");
   const name = String(model ?? "").trim() || "当前模型";
-  const looksUnsupported =
-    /image|vision|multimodal|content.*type|unsupported|invalid.*content|不支持/i.test(raw) ||
-    /\b400\b/.test(raw);
-  if (looksUnsupported) {
+  if (isImageUnsupported(raw)) {
     return new Error(
-      `模型「${name}」不支持识图。去「对话」页顶部胶囊换一个支持图片的模型` +
-        `（如 glm-4.6v-flash、doubao-seed-2-0-mini-260428、hy-vision-2.0-instruct）再发。\n` +
-        `服务端原文：${raw}`,
+      `模型「${name}」看起来不支持识图，到「对话」页顶部胶囊换一个视觉模型再发` +
+        `（如 glm-4.6v-flash、doubao-seed-2-0-mini-260428）。\n服务端原文：${raw}`,
     );
   }
   return describeIntentError(error);

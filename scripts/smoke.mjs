@@ -1638,6 +1638,27 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("带图发送没有走识图分支", reply.slice(0, 120));
   } else ok("带图发送走识图分支（交给视觉模型读小票 / 支付截图）");
 
+  // 选图入口的回归点：change 里必须先快照 FileList 再清空 input。
+  // 浏览器（含 Android WebView）执行 value = "" 会立刻清空同一个 FileList，
+  // 若顺序写反，选完图就什么都不发生、还不报错。
+  const fileInput = documentStub.getElementById("chatFile");
+  const picked = [{ type: "image/png", size: 1024, name: "pick.png", __dataUrl: "data:image/png;base64,RAW" }];
+  Object.defineProperty(fileInput, "files", { get: () => picked, configurable: true });
+  Object.defineProperty(fileInput, "value", {
+    get: () => "",
+    set: () => {
+      picked.length = 0; // 复刻浏览器行为：清空 value 同时清空 FileList
+    },
+    configurable: true,
+  });
+  await fileInput.__listeners.get("change")[0]();
+
+  const attachBox = documentStub.getElementById("chatAttach");
+  const thumbs = attachBox.querySelectorAll(".chat-attach__img");
+  if (attachBox.hidden || thumbs.length !== 1) {
+    fail("选完图没有挂到输入区", `hidden=${attachBox.hidden} thumbs=${thumbs.length}`);
+  } else ok("选完图立刻挂到输入区（先快照再清空 input，不会再「上传后啥都没有」）");
+
   // 超大缩略图不入库，避免把本机存储撑爆
   const huge = `data:image/jpeg;base64,${"A".repeat(50_000)}`;
   store.clearChat();
