@@ -228,8 +228,9 @@ async function defaultBranch({ owner, repo }) {
     const info = await gitee(`/repos/${owner}/${repo}`, {});
     const branch = String(info?.default_branch ?? "").trim();
     if (branch) return branch;
-  } catch {
-    /* 读不到就用下方兜底 */
+    console.warn(`[gitee-release] 仓库接口未返回 default_branch，字段为：${JSON.stringify(info?.default_branch)}`);
+  } catch (error) {
+    console.warn(`[gitee-release] 读仓库信息失败：${error.message}`);
   }
   return "";
 }
@@ -239,8 +240,8 @@ async function ensureRelease({ owner, repo, tag, token, name, body, branch }) {
   try {
     const release = await gitee(`/repos/${owner}/${repo}/releases/tags/${tag}`, { token });
     if (release?.id) return { id: release.id, created: false };
-  } catch {
-    /* 404 说明还没建过，往下走创建分支 */
+  } catch (error) {
+    console.log(`[gitee-release] 查询 tag ${tag} 的 Release：${error.message}（继续创建）`);
   }
   const created = await gitee(`/repos/${owner}/${repo}/releases`, {
     method: "POST",
@@ -418,6 +419,10 @@ async function main() {
   // 先验令牌：坏令牌时 Gitee 有一堆接口会回 404「Not Found Project」，
   // 照那个报错查会一路跑偏，这里直接把「令牌无效」挑明。
   await verifyToken({ owner, repo, token });
+
+  console.log(
+    `[gitee-release] 建 Release 请求体：${JSON.stringify(buildReleaseBody({ tag, name: `${owner}/${repo} 最新版`, body: "", branch }))}`,
+  );
 
   const { id: releaseId, created } = await ensureRelease({
     owner,
