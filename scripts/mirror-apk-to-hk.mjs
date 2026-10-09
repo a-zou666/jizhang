@@ -597,8 +597,11 @@ async function main() {
     manifestPath,
     branch,
     releaseBody:
-      `本 Release 由香港中转机（${publicBase}）自动维护。\n` +
-      "App 从附件 latest.json 获取版本信息，APK 本体走中转机直链。",
+      `本 Release 由香港中转机（${publicBase}）自动维护，只承载更新清单 latest.json。\n` +
+      "\n" +
+      "APK 本体不在 Gitee —— 走中转机直链（快约 12 倍），地址见 latest.json 里的 apk.arm64 / apk.arm。\n" +
+      "\n" +
+      "App 内的「软件更新」读这个清单，不需要翻墙。",
     onRetry: (attempt, reason, wait) => {
       console.warn(`[mirror] Gitee 抖动（${reason}），第 ${attempt} 次重试，${wait}ms 后…`);
     },
