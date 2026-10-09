@@ -73,7 +73,10 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 | --- | --- |
 | 版本清单 | `https://apk.电脑.tech:9443/latest.json` |
 | APK 直链 | `https://apk.电脑.tech:9443/app-arm64-release.apk` |
-| 发布页（手动兜底） | `https://apk.电脑.tech:9443/` |
+| 下载页（手动兜底，手机浏览器可直开） | `https://apk.电脑.tech:9443/` |
+
+> 站点只放行 `/`、`/index.html`、`/latest.json`、`/*.apk`、`/healthz`，其余一律 404
+> —— 这台机器上还跑着其它生产服务，不能被当成任意文件服务器。
 
 > 域名 `apk.电脑.tech` 在代码里写成 punycode **`apk.xn--wnyy6w.tech`**：部分运行时对中文域名的处理
 > 不一致，写 ASCII 最稳。`xn--` 后那段 base36 肉眼分不出对错（曾经把 `电脑` 误写成 `xn--nyqx68a`，
