@@ -1978,11 +1978,6 @@ a {
   line-height: 1.5;
 }
 
-.mm-badge--muted {
-  background: var(--surface-active);
-  color: var(--text-tertiary);
-}
-
 .mm-field {
   display: flex;
   flex-direction: column;
@@ -2008,30 +2003,28 @@ a {
   margin-bottom: var(--space-3);
 }
 
-.mm-pick {
+/* 对话页顶栏：选择当前用哪个模型（跨服务商罗列模型池） */
+.mp-body {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--surface-hover);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: 52vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.mm-pick__id {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.mp-group__name {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-tertiary);
 }
 
-.mm-pick input[type="checkbox"] {
-  flex-shrink: 0;
-  width: 1.15rem;
-  height: 1.15rem;
-  accent-color: var(--app-accent);
+/* 分组里的列表不再自己滚（外层 .mp-body 已在滚） */
+.mp-group .mm-list {
+  max-height: none;
+  overflow: visible;
 }
 
 .ghost-btn--danger {

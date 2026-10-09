@@ -4,6 +4,7 @@ import { hasBackend, parseImage, parseIntent } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
 import { icon } from "./icons.js";
 import { prepareImages } from "./image.js";
+import { openModelPicker } from "./models.js";
 import {
   addRecords,
   appendChat,
@@ -11,6 +12,7 @@ import {
   clearChat,
   getActiveProvider,
   getChat,
+  getProviders,
   getRecords,
   getSettings,
   removeRecord,
@@ -120,7 +122,9 @@ export function renderChat() {
   const model = getSettings().model;
   $("#chatModelName").textContent = provider
     ? `${provider.name}${model ? ` · ${model}` : " · 未选模型"}`
-    : "未启用服务商";
+    : getProviders().length
+      ? "未选模型"
+      : "未添加服务商";
 
   $("#chatClear").hidden = messages.length === 0;
 }
@@ -301,9 +305,16 @@ export async function sendMessage(raw, images = pendingImages) {
   if (busy) return;
   if (!text && !images?.length) return;
 
-  if (hasBackend() && !getSettings().apiKey) {
-    toast("请先在设置 → 模型管理里配好服务商", "error");
-    return;
+  if (hasBackend()) {
+    // 模型池在设置里维护，用哪个模型在这里选 —— 没选就没法请求，先说清楚该去哪一步
+    if (!getProviders().length) {
+      toast("先去 设置 → 模型管理 添加服务商并拉取模型", "error");
+      return;
+    }
+    if (!getSettings().model || !getSettings().apiKey) {
+      toast("先点顶部胶囊选一个要用的模型", "error");
+      return;
+    }
   }
 
   busy = true;
@@ -435,7 +446,8 @@ export function bindChat({ onNeedSettings } = {}) {
     clearPendingImages();
   }
 
-  $("#chatModel").addEventListener("click", () => onNeedSettings?.());
+  // 顶部胶囊 = 选择这次用哪个模型（模型池在设置 → 模型管理里维护）
+  $("#chatModel").addEventListener("click", () => openModelPicker({ onManage: () => onNeedSettings?.() }));
 
   $("#chatClear").addEventListener("click", () => {
     confirmDialog({

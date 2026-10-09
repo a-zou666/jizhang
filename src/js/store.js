@@ -639,7 +639,7 @@ export function removeProvider(id) {
   return true;
 }
 
-/** 启用：把这个服务商的地址 / Key / 模型写进当前连接参数（唯一的「切换」入口） */
+/** 启用：把这个服务商的地址 / Key / 模型写进当前连接参数（不走界面，供导入 / 测试调用） */
 export function activateProvider(id) {
   const provider = getProvider(id);
   if (!provider) return null;
@@ -660,9 +660,9 @@ export function activateProvider(id) {
 }
 
 /**
- * 在「模型选择」里点一个模型：它属于哪个服务商，就切换到那个服务商。
- * 与 activateProvider 的区别——这里由「选中的具体模型」驱动，而不是
- * 启用整家服务商并沿用它的默认模型；这样「当前用的模型」是显式选出来的，
+ * 在对话页顶部的「选择模型」里点一个模型：它属于哪个服务商，就切换到那个服务商。
+ * 界面上换模型**只有这一个入口**（设置 → 模型管理只管「有哪些模型可拉取」）；
+ * 这样「当前用的模型」始终是用户在对话页显式选出来的，
  * 切到 Minimax 就走 Minimax 的 URL，切到智谱就走智谱的 URL。
  */
 export function selectModel(providerId, modelId) {

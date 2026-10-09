@@ -8,7 +8,6 @@ import {
   categoryColor,
   clearRecords,
   exportPayload,
-  getActiveProvider,
   getProviders,
   getRecords,
   importBackup,
@@ -22,15 +21,14 @@ import { $, dateKey, el, round2, yuan } from "./util.js";
 /* ---------------- 渲染 ---------------- */
 export function renderSettings() {
   const settings = getSettings();
-  const active = getActiveProvider();
+  const providers = getProviders();
+  const modelCount = providers.reduce((sum, provider) => sum + provider.models.length, 0);
 
-  // 连接区只有「模型管理」一个入口：服务商、Key、模型全在里面维护，
-  // 这里只显示当前用的是谁，不再重复摆一套协议 / 地址 / Key / 模型
-  $("#modelManagerValue").textContent = active
-    ? `${active.name} · ${settings.model || "未选模型"}`
-    : getProviders().length
-      ? `${getProviders().length} 个服务商（未启用）`
-      : "未添加";
+  // 连接区只有「模型管理」一个入口：服务商与可选模型池在里面维护，
+  // 具体用哪个模型在对话页顶部选（这里只反映池子里有多少可选）
+  $("#modelManagerValue").textContent = providers.length
+    ? `${providers.length} 个服务商 · ${modelCount} 个可选模型`
+    : "未添加";
 
   $("#weekStartValue").textContent = settings.weekStart === 0 ? "周日" : "周一";
   $("#budgetValue").textContent = yuan(settings.budget);
@@ -52,7 +50,7 @@ export function bindSettings() {
     const box = $("#testResult");
 
     if (!current.apiKey) {
-      toast("先在「模型管理」里把服务商配好", "error");
+      toast("先点对话页顶部胶囊选一个模型，再测试", "error");
       return;
     }
 

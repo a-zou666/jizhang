@@ -1,4 +1,9 @@
-/** 模型管理：服务商管理（连接配置）+ 模型选择（当前用哪个） */
+/**
+ * 模型相关界面，分两块各管一件事：
+ *  - openModelManager（设置 → 模型管理）：服务商 + 可选模型池，
+ *    决定「有哪些模型能被拉进 App 用」，不在这里选当前用哪个；
+ *  - openModelPicker（对话页顶部胶囊）：从模型池里挑一个当前用的模型。
+ */
 
 import { listModels } from "./bridge.js";
 import { hydrateIcons } from "./icons.js";
@@ -18,26 +23,19 @@ import {
   updateProvider,
 } from "./store.js";
 import { closeModal, confirmDialog, openModal, toast } from "./ui.js";
-import { buildEndpoint, el, escapeHtml } from "./util.js";
+import { buildEndpoint, el } from "./util.js";
 
-/* ================= 一级：模型管理（服务商管理 + 模型选择） ================= */
+/* ============ 一级：模型管理（只维护「有哪些模型可用」） ============ */
 export function openModelManager(onClose = null) {
   openModal(
     `<p class="modal-title">模型管理</p>
-     <p class="t-footnote mm-hint">先在「服务商管理」里添加并配置每个服务商有哪些模型，再到下方「模型选择」挑一个用</p>
+     <p class="t-footnote mm-hint">这里把各服务商的模型拉进 App：添加服务商，再点它右侧「设置」，把模型「从 API 拉取」或手动填进来。<br />具体用哪一个，去「对话」页顶部那个胶囊里选 —— 拉到的模型全部都能在那儿挑，不做限制。</p>
      <div class="mm-section">
        <div class="mm-section__head">
-         <span class="mm-section__title">服务商管理</span>
+         <span class="mm-section__title">服务商</span>
          <button class="primary-btn primary-btn--compact" id="mmAdd" type="button">添加服务商</button>
        </div>
        <div class="mm-list" id="mmProviders"></div>
-     </div>
-     <div class="mm-section">
-       <div class="mm-section__head">
-         <span class="mm-section__title">模型选择</span>
-       </div>
-       <p class="t-footnote mm-hint">点一个模型即切换到它所属的服务商（自动换 URL）</p>
-       <div class="mm-list" id="mmModelChoice"></div>
      </div>
      <div class="modal-actions">
        <button class="ghost-btn" id="mmClose" type="button">关闭</button>
@@ -47,14 +45,9 @@ export function openModelManager(onClose = null) {
       onMount: (panel) => {
         // 进二级（编辑 / 拉取）再回来时，整个面板重建
         const reopen = () => openModelManager(onClose);
-        const paint = () => {
-          paintProviders(panel.querySelector("#mmProviders"), reopen);
-          paintModelChoice(panel.querySelector("#mmModelChoice"), paint);
-        };
-
         panel.querySelector("#mmClose").addEventListener("click", closeModal);
         panel.querySelector("#mmAdd").addEventListener("click", () => openProviderEditor(null, reopen));
-        paint();
+        paintProviders(panel.querySelector("#mmProviders"), reopen);
       },
     },
   );
@@ -66,7 +59,7 @@ function paintProviders(list, reopen) {
     list.replaceChildren(
       el("p", {
         class: "mm-empty",
-        text: "还没有服务商。点上方「添加服务商」，填好名称 / 地址 / Key，并配置它家可用的模型。",
+        text: "还没有服务商。点上方「添加服务商」，填好名称 / 地址 / Key，再把可用的模型加进来。",
       }),
     );
     return;
@@ -80,7 +73,7 @@ function providerRow(provider, reopen) {
   const main = el("div", { class: "mm-row__main" }, [
     el("span", { class: "mm-row__title" }, [
       el("span", { text: provider.name }),
-      isActive ? el("span", { class: "mm-badge", text: "当前" }) : null,
+      isActive ? el("span", { class: "mm-badge", text: "在用" }) : null,
     ]),
     el("span", {
       class: "mm-row__desc",
@@ -104,46 +97,89 @@ function providerRow(provider, reopen) {
   return el("div", { class: `mm-row${isActive ? " is-active" : ""}` }, [main, setBtn]);
 }
 
-/* ================= 模型选择：跨服务商聚合 ================= */
-function paintModelChoice(list, repaint) {
-  const providers = getProviders();
+/* ============ 对话页顶部胶囊：选择这次用哪个模型 ============ */
+/**
+ * 列出所有服务商下的可用模型（即模型池），点一个就换成它：
+ * 地址 / Key 跟着切到它所属的服务商（selectModel 是唯一的切换入口）。
+ * 池子为空时引导去「模型管理」加模型。
+ */
+export function openModelPicker({ onManage } = {}) {
   const { activeProviderId, model: currentModel } = getSettings();
-  const choices = [];
-  for (const provider of providers) {
-    for (const model of provider.models) {
-      choices.push({
-        provider,
-        model,
-        isCurrent: activeProviderId === provider.id && currentModel === model.id,
-      });
-    }
-  }
-  if (!choices.length) {
-    list.replaceChildren(
-      el("p", { class: "mm-empty", text: "还没有可选模型：去上方服务商里添加，或「从 API 拉取」。" }),
+  const groups = getProviders()
+    .map((provider) => ({ provider, models: provider.models }))
+    .filter((group) => group.models.length);
+
+  if (!groups.length) {
+    openModal(
+      `<p class="modal-title">选择模型</p>
+       <p class="mm-empty">还没有可选的模型。先去「模型管理」加一个服务商，再点「从 API 拉取」把模型拉进来。</p>
+       <div class="modal-actions">
+         <button class="ghost-btn" id="mpClose" type="button">关闭</button>
+         <button class="primary-btn primary-btn--compact" id="mpManage" type="button">去模型管理</button>
+       </div>`,
+      {
+        onMount: (panel) => {
+          panel.querySelector("#mpClose").addEventListener("click", closeModal);
+          panel.querySelector("#mpManage").addEventListener("click", () => {
+            closeModal();
+            onManage?.();
+          });
+        },
+      },
     );
     return;
   }
-  list.replaceChildren(...choices.map((item) => choiceRow(item, repaint)));
-  hydrateIcons(list);
-}
 
-function choiceRow(item, repaint) {
-  const { provider, model, isCurrent } = item;
-  const main = el("button", { class: "mm-row__main", type: "button" }, [
-    el("span", { class: "mm-row__title" }, [
-      el("span", { text: model.alias || model.id }),
-      isCurrent ? el("span", { class: "mm-badge", text: "在用" }) : null,
-    ]),
-    el("span", { class: "mm-row__desc", text: `${provider.name} · ${model.id}` }),
-  ]);
-  main.addEventListener("click", () => {
-    if (isCurrent) return toast(`${provider.name} · ${model.id} 已是当前模型`, "ok");
-    selectModel(provider.id, model.id);
-    repaint();
-    toast(`已切换到 ${provider.name}`, "ok");
-  });
-  return el("div", { class: `mm-row${isCurrent ? " is-active" : ""}` }, [main]);
+  openModal(
+    `<p class="modal-title">选择模型</p>
+     <p class="t-footnote mm-hint">这里只是挑「用哪一个」；要加新的模型去「模型管理」</p>
+     <div class="mp-body" id="mpBody"></div>
+     <div class="modal-actions">
+       <button class="ghost-btn" id="mpManage" type="button">模型管理</button>
+       <button class="primary-btn primary-btn--compact" id="mpClose" type="button">完成</button>
+     </div>`,
+    {
+      onMount: (panel) => {
+        const body = panel.querySelector("#mpBody");
+        body.replaceChildren(
+          ...groups.map(({ provider, models }) => {
+            const list = el("div", { class: "mm-list" });
+            for (const model of models) {
+              const isCurrent = activeProviderId === provider.id && currentModel === model.id;
+              const label = model.alias || model.id;
+              const main = el("button", { class: "mm-row__main", type: "button" }, [
+                el("span", { class: "mm-row__title" }, [
+                  el("span", { text: label }),
+                  isCurrent ? el("span", { class: "mm-badge", text: "在用" }) : null,
+                ]),
+                el("span", {
+                  class: "mm-row__desc",
+                  text: model.alias ? model.id : provider.name,
+                }),
+              ]);
+              main.addEventListener("click", () => {
+                if (isCurrent) return toast(`${label} 已经是当前模型`, "ok");
+                selectModel(provider.id, model.id);
+                closeModal();
+                toast(`已切换到 ${provider.name} · ${label}`, "ok");
+              });
+              list.append(el("div", { class: `mm-row${isCurrent ? " is-active" : ""}` }, [main]));
+            }
+            return el("div", { class: "mp-group" }, [
+              el("span", { class: "mp-group__name", text: provider.name }),
+              list,
+            ]);
+          }),
+        );
+
+        panel.querySelector("#mpClose").addEventListener("click", closeModal);
+        panel.querySelector("#mpManage").addEventListener("click", () => {
+          closeModal();
+          onManage?.();
+        });
+      },
+    },
+  );
 }
 
 /* ================= 服务商编辑 / 新增 ================= */
@@ -382,7 +418,12 @@ function modelChip(providerId, model, repaint) {
   return el("div", { class: "mm-row" }, [main, remove]);
 }
 
-/* ================= 从 API 拉取后勾选加入 ================= */
+/* ================= 从 API 拉取：拉到的模型全部进池 ================= */
+/**
+ * 正常拉取：拿到接口返回的模型列表后，全部加入这家服务商的模型池
+ * （已有的不重复加）。这里**不做**「勾选哪些能进池」的限制 ——
+ * 拉取只负责把模型带进 App，具体用哪个去对话页顶部的胶囊里选。
+ */
 export async function fetchModelsInto(providerId, repaint) {
   const provider = getProvider(providerId);
   if (!provider) return;
@@ -405,43 +446,12 @@ export async function fetchModelsInto(providerId, repaint) {
   const ids = [...new Set(result.models.map((id) => String(id).trim()).filter(Boolean))];
   if (!ids.length) return toast("没有可用的模型", "error");
 
-  const owned = new Set(provider.models.map((item) => item.id));
-  openModal(
-    `<p class="modal-title">拉取到 ${ids.length} 个模型</p>
-     <p class="t-footnote mm-hint">勾选要加入 ${escapeHtml(provider.name)} 的模型（已加入的不会重复添加）</p>
-     <div class="mm-list" id="mmPickList"></div>
-     <div class="modal-actions">
-       <button class="ghost-btn" id="mmPickAll" type="button">全选</button>
-       <button class="primary-btn primary-btn--compact" id="mmPickAdd" type="button">加入所选</button>
-     </div>`,
-    {
-      onMount: (panel) => {
-        const list = panel.querySelector("#mmPickList");
-        const boxes = ids.map((id) => {
-          const label = el("label", { class: "mm-pick" }, [
-            el("input", { type: "checkbox", value: id, checked: !owned.has(id) }),
-            el("span", { class: "mm-pick__id", text: id }),
-            owned.has(id) ? el("span", { class: "mm-badge mm-badge--muted", text: "已加入" }) : null,
-          ]);
-          return label;
-        });
-        list.replaceChildren(...boxes);
-
-        panel.querySelector("#mmPickAll").addEventListener("click", () => {
-          const turnOn = boxes.some((box) => !box.querySelector("input").checked);
-          boxes.forEach((box) => {
-            box.querySelector("input").checked = turnOn;
-          });
-        });
-        panel.querySelector("#mmPickAdd").addEventListener("click", () => {
-          const picked = boxes.filter((box) => box.querySelector("input").checked).map((box) => box.querySelector("input").value);
-          if (!picked.length) return toast("还没有勾选模型", "error");
-          const added = addProviderModels(providerId, picked);
-          closeModal();
-          repaint?.();
-          toast(added ? `已加入 ${added} 个模型` : "这些模型都已在列表中", added ? "ok" : "error");
-        });
-      },
-    },
+  // 拉到的全部进池：不去勾选、不限制。用哪个在对话页胶囊里挑。
+  const added = addProviderModels(providerId, ids);
+  repaint?.();
+  const total = getProvider(providerId)?.models.length ?? 0;
+  toast(
+    added ? `已拉取并加入 ${added} 个新模型（共 ${total} 个）` : `拉到的模型都已在池中（共 ${total} 个）`,
+    "ok",
   );
 }

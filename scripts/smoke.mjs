@@ -1070,21 +1070,83 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("编辑弹窗没有可选模型管理区");
   } else ok("编辑弹窗内含「可选模型」：可添加 / 从 API 拉取");
 
-  // 重开模型管理（丢弃未保存的编辑弹窗），核对模型选择区
+  // 重开模型管理（丢弃未保存的编辑弹窗）：这里只维护模型池，不该再有「模型选择」
   models.openModelManager();
   await settle();
-  const choiceList = panel.querySelector("#mmModelChoice");
-  const choice = choiceList?.querySelector(".mm-row");
-  const choiceText = String(choice?.textContent ?? "");
-  if (!choiceText.includes("stub-a")) {
-    fail("模型选择区没列出模型", choiceText);
-  } else ok("「模型选择」列出所有服务商的可选模型（标注所属服务商）");
+  if (panel.querySelector("#mmModelChoice") || String(panel.textContent).includes("模型选择")) {
+    fail("模型管理里不该再有「模型选择」区", String(panel.textContent).slice(0, 200));
+  } else ok("模型管理只把模型拉进池子（正常拉取），切换当前模型在对话页胶囊");
 
-  choice.querySelector(".mm-row__main").__listeners.get("click")[0]();
+  // 对话页顶部胶囊 = 选当前用哪个模型（跨服务商罗列模型池）
+  models.openModelPicker();
+  await settle();
+  const group = panel.querySelector(".mp-group");
+  const groupText = String(group?.textContent ?? "");
+  if (!groupText.includes("桩服务商") || !groupText.includes("stub-a") || !groupText.includes("stub-b")) {
+    fail("选择模型弹窗没列出模型池", groupText);
+  } else ok("对话页胶囊列出模型池：按服务商分组，模型都在里面");
+
+  group.querySelector(".mm-row__main").__listeners.get("click")[0]();
   await settle();
   if (store.getSettings().activeProviderId !== provider.id || store.getSettings().model !== "stub-a") {
-    fail("点选模型未切换服务商", JSON.stringify({ ...store.getSettings(), providers: undefined }));
-  } else ok("点选模型即切换到它所属服务商（自动换 URL）");
+    fail("选模型没切换当前连接", JSON.stringify({ ...store.getSettings(), providers: undefined }));
+  } else ok("在对话页选一个模型即当前生效（连带切到它所属服务商的地址 / Key）");
+
+  // 点对话页头部那个胶囊，走的是真实绑定（chat.js → 选择模型）
+  documentStub.getElementById("chatModel").__listeners.get("click")[0]();
+  await settle();
+  if (!panel.querySelector(".mp-group")) {
+    fail("对话页头部胶囊没有打开「选择模型」", String(panel.textContent).slice(0, 160));
+  } else {
+    const badge = String(panel.querySelector(".mm-badge")?.textContent ?? "");
+    if (badge !== "在用") fail("选择模型里没标出当前在用", badge);
+    else ok("点对话页头部胶囊即打开「选择模型」，当前用的那个标「在用」");
+  }
+
+  // 池子为空时给出去「模型管理」的引导
+  store.replaceAll({ records: [], settings: {} });
+  models.openModelPicker();
+  await settle();
+  if (!panel.querySelector(".mm-empty") || !panel.querySelector("#mpManage")) {
+    fail("模型池为空时没有引导", String(panel.textContent).slice(0, 160));
+  } else ok("模型池为空时「选择模型」引导去「模型管理」添加");
+
+  store.replaceAll({ records: [], settings: {} });
+}
+
+/* --- 从 API 拉取：拉到的模型全部进池，不弹「勾选加入」的限制弹窗 --- */
+{
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const models = await import(new URL("../src/js/models.js", import.meta.url));
+  const panel = documentStub.getElementById("modalPanel");
+  store.replaceAll({ records: [], settings: {} });
+
+  const provider = store.addProvider({
+    name: "拉取测试",
+    baseUrl: "https://pull.test",
+    apiKey: "sk-pull",
+    models: ["already-1"],
+  });
+
+  // 在测试里把 Tauri 的 invoke 临时 stub 成返回一批假模型，模拟「正常拉取」
+  const prevTauri = globalThis.__TAURI__;
+  globalThis.__TAURI__ = {
+    core: { invoke: async () => ({ ok: true, models: ["pull-a", "pull-b", "pull-c"] }) },
+  };
+  try {
+    await models.fetchModelsInto(provider.id, () => {});
+    await settle();
+  } finally {
+    globalThis.__TAURI__ = prevTauri;
+  }
+
+  const ids = store.getProvider(provider.id).models.map((item) => item.id);
+  const allIn = ["already-1", "pull-a", "pull-b", "pull-c"].every((id) => ids.includes(id));
+  if (!allIn) {
+    fail("从 API 拉取没把全部模型加进池子", JSON.stringify(ids));
+  } else if (panel.querySelector("#mmPickList")) {
+    fail("从 API 拉取不该再弹「勾选加入」弹窗（那是限制，不是正常拉取）", "");
+  } else ok("从 API 拉取：拉到的模型全部进池（含已有），不再弹勾选限制弹窗");
 
   store.replaceAll({ records: [], settings: {} });
 }
