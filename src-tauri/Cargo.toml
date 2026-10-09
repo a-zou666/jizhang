@@ -24,7 +24,16 @@ tauri = { version = "2.0.0", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # 用于发起 HTTP 请求调用大模型 API（json 即可，无需 multipart；语音转写已下线）
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+#
+# TLS 后端：**必须用系统信任库**（`rustls-tls-native-roots`），不要用默认的 rustls。
+#
+# 默认的 `rustls-tls` 走 `webpki-roots` —— 那是编译期静态打包的根证书列表，
+# 只认写进去的那批根 CA，**不跟随系统更新**。Let's Encrypt 自 2025 年起启用了新的
+# 中间证书体系（`YR2` → `Root YR` → `ISRG Root X1`），一旦 webpki-roots 的版本
+# 还没收录这条链，握手就会直接失败，表现是 `error sending request`：
+# 实测同一地址**系统浏览器能打开、App 里连不上**，极难归因。
+# 换 native-roots 后走 Android / iOS / Windows 各自的系统信任存储，与浏览器完全一致。
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 # 异步运行时
 tokio = { version = "1.0", features = ["macros", "rt"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

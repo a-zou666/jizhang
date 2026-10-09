@@ -292,12 +292,19 @@ pub fn parse_manifest(value: &Value) -> Result<UpdateManifest, String> {
 
 /// 拉取更新清单。
 ///
-/// Gitee 的附件下载会 302 跳到对象存储，reqwest 默认跟随重定向，不用特殊处理。
-/// 但没有 Release 时 Gitee 返回的是 HTML 404 页面，所以这里单独把 404 说明白。
+/// 自建服务器直接返回 JSON，没有重定向；reqwest 默认也是跟随的，不用特殊处理。
+/// 但没有发布记录时返回 404，所以这里单独把 404 说明白。
 pub async fn fetch_manifest(url: &str) -> Result<UpdateManifest, String> {
     let http = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
+        // 只用 HTTP/1.1。
+        //
+        // 清单只有 300 多字节，h2 的多路复用毫无收益；而 h2 协商（ALPN + SETTINGS）
+        // 反而多一轮往返、也多一处可能出问题的地方 —— 实测在移动网络上撞到过
+        // TLS 层 `bad key share` 导致整个请求失败（`error sending request`）。
+        // 降成 h1 后链路最短、最容易排查。
+        .http1_only()
         .user_agent("ai-ledger-updater")
         .build()
         .map_err(|e| format!("初始化网络客户端失败：{}", e))?;
@@ -306,7 +313,7 @@ pub async fn fetch_manifest(url: &str) -> Result<UpdateManifest, String> {
         .get(url)
         .send()
         .await
-        .map_err(|e| format!("连不上更新服务器：{}", e))?;
+        .map_err(|e| describe_request_error(url, &e))?;
 
     let status = response.status();
     if status == reqwest::StatusCode::NOT_FOUND {
@@ -321,6 +328,47 @@ pub async fn fetch_manifest(url: &str) -> Result<UpdateManifest, String> {
         .await
         .map_err(|e| format!("更新清单不是合法 JSON：{}", e))?;
     parse_manifest(&body)
+}
+
+/// 把 `reqwest` 的失败翻译成人能看懂的话。
+///
+/// reqwest 的 `Display` 往往只有一句 `error sending request for url (...)`，
+/// **真正的线索全埋在 `source()` 链里**（TLS 握手失败 / DNS 解析失败 / 连接超时
+/// 都会长成这样）。此前只透出最外层，导致「连不上」这种没法排查的提示 ——
+/// 现在把整条 source 链拼出来。
+fn describe_request_error(url: &str, error: &reqwest::Error) -> String {
+    let mut detail = error.to_string();
+    let mut source: Option<&(dyn std::error::Error + 'static)> = error.source();
+    while let Some(inner) = source {
+        let text = inner.to_string();
+        if !detail.contains(&text) {
+            detail.push_str(" ← ");
+            detail.push_str(&text);
+        }
+        source = inner.source();
+    }
+
+    // 按最常见的几种原因给出下一步，别让用户对着英文报错发呆。
+    let hint = if detail.contains("Certificate") || detail.contains("certificate") || detail.contains("UnknownIssuer") {
+        "证书校验失败。若浏览器能打开该地址，多半是客户端的根证书列表没跟上，把 App 升级到最新版再试。"
+    } else if detail.contains("dns") || detail.contains("Name or service not known") || detail.contains("failed to lookup") {
+        "域名解析失败，检查手机网络（换 WiFi / 关掉代理或 VPN 再试）。"
+    } else if detail.contains("timed out") || detail.contains("timeout") {
+        "连接超时，可能是当前网络屏蔽了该端口，换网络再试。"
+    } else {
+        "可以先到发布页手动下载：{}"
+    };
+
+    if hint.contains("{}") {
+        format!(
+            "连不上更新服务器：{}（{}）\n{}",
+            url,
+            detail,
+            hint.replace("{}", RELEASES_PAGE)
+        )
+    } else {
+        format!("连不上更新服务器：{}（{}）\n{}", url, detail, hint)
+    }
 }
 
 #[cfg(test)]
