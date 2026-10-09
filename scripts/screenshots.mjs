@@ -20,18 +20,32 @@ const OUT = resolve(HERE, "..", "docs", "screenshots");
 const BASE = process.env.PREVIEW_URL ?? "http://127.0.0.1:8080/";
 
 /* ---------------- 演示数据：让每个界面都有内容 ---------------- */
-const DAY = (d) => `2026-10-${String(d).padStart(2, "0")}`;
-const at = (d, h = 9) => new Date(2026, 9, d, h, 0, 0).getTime();
+// 日期相对「今天」算，避免截图时首页（只显示当天记录）因固定日期落空
+function dateKey(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() - offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+const DAY = (offset = 0) => dateKey(offset);
+const at = (offset = 0, h = 9) => {
+  const d = new Date();
+  d.setDate(d.getDate() - offset);
+  d.setHours(h, 0, 0, 0);
+  return d.getTime();
+};
 
 const records = [
-  { id: "d1", date: DAY(8), item: "拿铁", category: "餐饮", amount: 32, createdAt: at(8, 8) },
-  { id: "d2", date: DAY(8), item: "地铁", category: "交通", amount: 6, createdAt: at(8, 9) },
-  { id: "d3", date: DAY(7), item: "电影票", category: "娱乐", amount: 78, createdAt: at(7, 20) },
-  { id: "d4", date: DAY(6), item: "洗发水", category: "日用", amount: 49.9, createdAt: at(6, 19) },
-  { id: "d5", date: DAY(5), item: "键盘", category: "数码", amount: 259, createdAt: at(5, 15) },
-  { id: "d6", date: DAY(3), item: "房租", category: "居住", amount: 1800, createdAt: at(3, 10) },
-  { id: "d7", date: DAY(2), item: "火锅", category: "餐饮", amount: 168, createdAt: at(2, 18) },
-  { id: "d8", date: DAY(1), item: "水果", category: "餐饮", amount: 45.5, createdAt: at(1, 11) },
+  { id: "d1", date: DAY(0), item: "拿铁", category: "餐饮", amount: 32, createdAt: at(0, 8) },
+  { id: "d2", date: DAY(0), item: "地铁", category: "交通", amount: 6, createdAt: at(0, 9) },
+  { id: "d3", date: DAY(1), item: "电影票", category: "娱乐", amount: 78, createdAt: at(1, 20) },
+  { id: "d4", date: DAY(2), item: "洗发水", category: "日用", amount: 49.9, createdAt: at(2, 19) },
+  { id: "d5", date: DAY(3), item: "键盘", category: "数码", amount: 259, createdAt: at(3, 15) },
+  { id: "d6", date: DAY(5), item: "房租", category: "居住", amount: 1800, createdAt: at(5, 10) },
+  { id: "d7", date: DAY(6), item: "火锅", category: "餐饮", amount: 168, createdAt: at(6, 18) },
+  { id: "d8", date: DAY(7), item: "水果", category: "餐饮", amount: 45.5, createdAt: at(7, 11) },
 ];
 
 const providers = [
@@ -55,21 +69,47 @@ const providers = [
   },
 ];
 
-/* 演示用的小票缩略图（真实渲染进气泡，不手工 P 图） */
-const receiptThumb = `data:image/svg+xml;utf8,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="240">
-     <rect width="180" height="240" fill="#F2F4F7"/>
-     <rect x="16" y="18" width="148" height="204" rx="6" fill="#FFFFFF" stroke="#DFE3E8"/>
-     <text x="90" y="46" font-size="14" text-anchor="middle" fill="#111827">便利小票</text>
-     <line x1="30" y1="58" x2="150" y2="58" stroke="#E5E7EB"/>
-     <text x="30" y="82" font-size="11" fill="#374151">拿铁 × 1</text><text x="150" y="82" font-size="11" text-anchor="end" fill="#111827">32.00</text>
-     <text x="30" y="104" font-size="11" fill="#374151">三明治 × 1</text><text x="150" y="104" font-size="11" text-anchor="end" fill="#111827">18.50</text>
-     <text x="30" y="126" font-size="11" fill="#374151">纸巾 × 2</text><text x="150" y="126" font-size="11" text-anchor="end" fill="#111827">6.00</text>
-     <line x1="30" y1="142" x2="150" y2="142" stroke="#E5E7EB"/>
-     <text x="30" y="164" font-size="12" fill="#111827">合计</text><text x="150" y="164" font-size="12" text-anchor="end" fill="#DC2626">56.50</text>
-     <text x="90" y="196" font-size="9" text-anchor="middle" fill="#9CA3AF">2026-10-08 09:12</text>
-   </svg>`,
-)}`;
+/* 演示用的多张缩略图（真实渲染进气泡，不手工 P 图），用来体现「一次发多张」 */
+const svgThumb = (body) =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="240">${body}</svg>`,
+  )}`;
+
+const receiptThumb = svgThumb(`
+  <rect width="180" height="240" fill="#F2F4F7"/>
+  <rect x="16" y="18" width="148" height="204" rx="6" fill="#FFFFFF" stroke="#DFE3E8"/>
+  <text x="90" y="46" font-size="14" text-anchor="middle" fill="#111827">便利小票</text>
+  <line x1="30" y1="58" x2="150" y2="58" stroke="#E5E7EB"/>
+  <text x="30" y="82" font-size="11" fill="#374151">拿铁 × 1</text><text x="150" y="82" font-size="11" text-anchor="end" fill="#111827">32.00</text>
+  <text x="30" y="104" font-size="11" fill="#374151">三明治 × 1</text><text x="150" y="104" font-size="11" text-anchor="end" fill="#111827">18.50</text>
+  <text x="30" y="126" font-size="11" fill="#374151">纸巾 × 2</text><text x="150" y="126" font-size="11" text-anchor="end" fill="#111827">6.00</text>
+  <line x1="30" y1="142" x2="150" y2="142" stroke="#E5E7EB"/>
+  <text x="30" y="164" font-size="12" fill="#111827">合计</text><text x="150" y="164" font-size="12" text-anchor="end" fill="#DC2626">56.50</text>
+  <text x="90" y="196" font-size="9" text-anchor="middle" fill="#9CA3AF">2026-10-08 09:12</text>`);
+
+const paymentThumb = svgThumb(`
+  <rect width="180" height="240" fill="#ECFDF3"/>
+  <circle cx="90" cy="60" r="26" fill="#16A34A"/>
+  <path d="M80 60 l7 8 l13 -16" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="90" y="108" font-size="14" text-anchor="middle" fill="#111827">支付成功</text>
+  <text x="90" y="140" font-size="20" text-anchor="middle" fill="#16A34A">¥56.50</text>
+  <line x1="30" y1="160" x2="150" y2="160" stroke="#BBF7D0"/>
+  <text x="30" y="184" font-size="11" fill="#374151">便利店</text><text x="150" y="184" font-size="11" text-anchor="end" fill="#111827">微信支付</text>
+  <text x="90" y="212" font-size="9" text-anchor="middle" fill="#6B7280">2026-10-08 09:12</text>`);
+
+const menuThumb = svgThumb(`
+  <rect width="180" height="240" fill="#FFF7ED"/>
+  <rect x="16" y="18" width="148" height="204" rx="6" fill="#FFFFFF" stroke="#FED7AA"/>
+  <text x="90" y="46" font-size="14" text-anchor="middle" fill="#9A3412">外卖订单</text>
+  <line x1="30" y1="58" x2="150" y2="58" stroke="#FFEDD5"/>
+  <text x="30" y="82" font-size="11" fill="#374151">麻辣香锅</text><text x="150" y="82" font-size="11" text-anchor="end" fill="#111827">42.00</text>
+  <text x="30" y="104" font-size="11" fill="#374151">米饭 × 2</text><text x="150" y="104" font-size="11" text-anchor="end" fill="#111827">4.00</text>
+  <text x="30" y="126" font-size="11" fill="#374151">可乐 × 1</text><text x="150" y="126" font-size="11" text-anchor="end" fill="#111827">6.00</text>
+  <line x1="30" y1="142" x2="150" y2="142" stroke="#FFEDD5"/>
+  <text x="30" y="164" font-size="12" fill="#111827">合计</text><text x="150" y="164" font-size="12" text-anchor="end" fill="#DC2626">52.00</text>
+  <text x="90" y="196" font-size="9" text-anchor="middle" fill="#9CA3AF">2026-10-08 12:30</text>`);
+
+const demoImages = [receiptThumb, paymentThumb, menuThumb];
 
 const chat = [
   {
@@ -101,12 +141,12 @@ const chat = [
     items: [],
     state: "done",
     at: at(8, 10),
-    images: [receiptThumb],
+    images: demoImages,
   },
   {
     id: "c2c",
     role: "assistant",
-    text: "从这张小票里读出 3 笔，确认后入账：",
+    text: "从这几张图里读出 3 笔，确认后入账：",
     kind: "add",
     state: "pending",
     at: at(8, 10),
@@ -150,7 +190,7 @@ const seed = {
     model: "deepseek-chat",
     weekStart: 1,
     budget: 2600,
-    budgets: { "2026-10": 2600 },
+    budgets: { [dateKey(0).slice(0, 7)]: 2600 },
     categories: ["餐饮", "交通", "日用", "娱乐", "居住", "数码", "医疗", "其他"],
     providers,
     activeProviderId: "pv-deepseek",
@@ -182,7 +222,19 @@ async function main() {
     if (/^(device|preview)-\d+\.(png|jpg)$/.test(file)) rmSync(join(OUT, file));
   }
 
-  const browser = await chromium.launch();
+  // 优先用 playwright 自带的 chromium（作者环境；npx playwright@1.49.0 install chromium）；
+  // 本机没下载时兜底用系统已装的 Chrome（支持 CHROME_BIN 覆盖路径）
+  let browser;
+  try {
+    browser = await chromium.launch({ args: ["--no-sandbox"] });
+  } catch {
+    browser = await chromium.launch({
+      executablePath:
+        process.env.CHROME_BIN ||
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+  }
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -229,7 +281,7 @@ async function main() {
   await shoot(page, "chat", ".chat-row", 4);
   await page.evaluate(() => document.querySelector(".chat-bubble__image")?.scrollIntoView({ behavior: "instant", block: "start" }));
   await page.waitForTimeout(200);
-  await shoot(page, "chat-image", ".chat-bubble__image", 1);
+  await shoot(page, "chat-image", ".chat-bubble__image", demoImages.length);
 
   /* 设置页 */
   await page.click('.tabbar__item[data-tab="settings"]');
@@ -247,10 +299,10 @@ async function main() {
     await actions[0].click();
     await page.waitForTimeout(500);
     await shoot(page, "model-list", ".mm-row", 2);
-    await page.click("#mmModelDone").catch(() => {});
+    await page.click("#pvCancel").catch(() => {}); // 先关服务商编辑（嵌套弹窗）
     await page.waitForTimeout(400);
   }
-  await page.click("#mmClose").catch(() => {});
+  await page.click("#mmClose").catch(() => {}); // 再关模型管理
   await page.waitForTimeout(400);
 
   /* 回到对话页，现场发一句话看 AI 卡片 */
@@ -265,7 +317,11 @@ async function main() {
   console.log(`\n共 ${shots.length} 张，输出到 docs/screenshots/`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+export { seed, demoImages };
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
