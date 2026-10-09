@@ -4,7 +4,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 // 统计函数放在数据层 store.js（不依赖 DOM），账单页只是消费它们
-import { recordsInRange, sumByCategory } from "../src/js/store.js";
+import {
+  daysBetween,
+  groupRecordsByDate,
+  recordsInRange,
+  sumByCategory,
+} from "../src/js/store.js";
 
 const rec = (id, date, category, amount, createdAt = 0) => ({
   id,
@@ -67,4 +72,27 @@ test("分类汇总：空输入返回空数组，不会出现 division by zero", 
   assert.deepEqual(sumByCategory([]), []);
   const zero = sumByCategory([rec("z", "2026-10-01", "餐饮", 0)]);
   assert.equal(zero[0].percent, 0);
+});
+
+test("区间天数：闭区间含首尾，同一天算 1 天", () => {
+  assert.equal(daysBetween("2026-10-01", "2026-10-09"), 9);
+  assert.equal(daysBetween("2026-10-01", "2026-10-01"), 1);
+});
+
+test("区间天数：端点缺失或非法时返回 0（交给调用方兜底）", () => {
+  assert.equal(daysBetween("", "2026-10-09"), 0);
+  assert.equal(daysBetween("2026-10-09", ""), 0);
+  assert.equal(daysBetween("不是日期", "2026-10-09"), 0);
+});
+
+test("明细分组：按日期聚合并算出当天小计，顺序沿用传入顺序", () => {
+  const groups = groupRecordsByDate(recordsInRange(sample, "2026-10-01", "2026-10-09"));
+  assert.deepEqual(groups.map((group) => group.date), ["2026-10-09", "2026-10-05", "2026-10-01"]);
+  assert.deepEqual(groups.map((group) => group.total), [50, 30, 30]);
+  assert.deepEqual(groups[1].records.map((record) => record.id), ["c", "b"]);
+});
+
+test("明细分组：空输入返回空数组", () => {
+  assert.deepEqual(groupRecordsByDate([]), []);
+  assert.deepEqual(groupRecordsByDate(undefined), []);
 });

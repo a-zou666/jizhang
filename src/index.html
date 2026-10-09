@@ -208,21 +208,19 @@
              ================================================================ -->
         <section class="page" data-page="bills" id="page-bills" aria-label="账单">
           <header class="bills-header">
-            <div class="bills-header__row">
-              <h1 class="t-hero">账单</h1>
-            </div>
-            <p class="bills-header__hint" id="billsRangeText">—</p>
+            <h1 class="bills-title t-hero">账单</h1>
+            <p class="bills-subtitle" id="billsRangeText">—</p>
           </header>
 
           <div class="page-body">
-            <!-- 日期区间：默认本月 1 号 → 今天，可分别改开始 / 结束 -->
+            <!-- 日期区间：默认本月 1 号 → 今天，开始 / 结束都能单独改 -->
             <section class="panel bills-range glass-sheen soft-glass">
-              <div class="bills-range__row">
+              <div class="bills-range__grid">
                 <label class="bills-range__field">
                   <span class="bills-range__label">开始</span>
                   <input class="settings-input" id="billsStart" type="date" aria-label="开始日期" />
                 </label>
-                <span class="bills-range__arrow" aria-hidden="true">→</span>
+                <span class="bills-range__sep" aria-hidden="true">至</span>
                 <label class="bills-range__field">
                   <span class="bills-range__label">结束</span>
                   <input class="settings-input" id="billsEnd" type="date" aria-label="结束日期" />
@@ -231,29 +229,35 @@
               <div class="chip-row" id="billsPresets"></div>
             </section>
 
-            <!-- 区间合计 -->
-            <section class="panel bills-sum glass-sheen soft-glass">
-              <span class="bills-sum__caption">区间支出</span>
-              <p class="bills-sum__amount t-numeric" id="billsTotal">¥0</p>
-              <p class="bills-sum__meta t-footnote" id="billsCount"></p>
-            </section>
-
-            <!-- 各分类分别花了多少 -->
-            <section class="panel bills-cats-panel glass-sheen soft-glass">
+            <!-- 区间概览：环形图看各分类占比，旁边是三个关键指标，下面按分类列金额 -->
+            <section class="panel bills-overview glass-sheen soft-glass">
               <header class="panel__head">
-                <h2 class="panel__title t-title3">分类构成</h2>
+                <h2 class="panel__title bills-section-title">区间概览</h2>
                 <span class="panel__count t-footnote" id="billsCatCount"></span>
               </header>
+
+              <div class="bills-overview__body">
+                <div class="bills-donut">
+                  <div class="bills-donut__chart" id="billsDonut" aria-hidden="true"></div>
+                  <div class="bills-donut__center">
+                    <span class="bills-donut__caption">区间支出</span>
+                    <strong class="bills-donut__total t-numeric" id="billsTotal">¥0</strong>
+                    <span class="bills-donut__meta t-footnote" id="billsCount"></span>
+                  </div>
+                </div>
+                <ul class="bills-stats" id="billsStats"></ul>
+              </div>
+
               <div class="bills-cats" id="billsCats"></div>
             </section>
 
-            <!-- 逐条明细：分类 / 日期 / 时间 / 金额 -->
+            <!-- 逐条明细：按日期分组，每行给出分类 · 时间 · 金额 -->
             <section class="panel bills-records-panel glass-sheen soft-glass">
               <header class="panel__head">
-                <h2 class="panel__title t-title3">消费明细</h2>
+                <h2 class="panel__title bills-section-title">消费明细</h2>
                 <span class="panel__count t-footnote" id="billsListCount"></span>
               </header>
-              <ul class="bills-records" id="billsList"></ul>
+              <div class="bills-records" id="billsList"></div>
             </section>
           </div>
         </section>

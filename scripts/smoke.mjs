@@ -1203,10 +1203,28 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("分类构成行数不对（应为 3 个分类）", `实际 ${catRows.length}`);
   } else ok("分类构成列出 3 个分类，并按金额降序");
 
+  // 环形图：每个分类一段弧
+  const donutArcs = documentStub.getElementById("billsDonut").querySelectorAll(".bills-donut__arc");
+  if (donutArcs.length !== 3) {
+    fail("环形图的分类弧段数不对（应为 3 段）", `实际 ${donutArcs.length}`);
+  } else ok("环形图按分类画出 3 段弧，各分类占比一眼可见");
+
+  // 关键指标：笔数 / 日均 / 最大单笔
+  const statRows = documentStub.getElementById("billsStats").querySelectorAll(".bills-stat");
+  if (statRows.length !== 3) {
+    fail("区间指标行数不对（应为笔数 / 日均 / 最大单笔 3 行）", `实际 ${statRows.length}`);
+  } else ok("区间指标三行：笔数 / 日均 / 最大单笔");
+
   const recordRows = documentStub.getElementById("billsList").querySelectorAll(".bills-record");
   if (recordRows.length !== 3) {
     fail("消费明细行数不对（应为 3 笔）", `实际 ${recordRows.length}`);
   } else ok("消费明细列出区间内 3 笔");
+
+  // 明细按日期分组：3 笔分在 3 天，每天一个分组标题
+  const dayGroups = documentStub.getElementById("billsList").querySelectorAll(".bills-day");
+  if (dayGroups.length !== 3) {
+    fail("消费明细没有按日期分组（应为 3 组）", `实际 ${dayGroups.length}`);
+  } else ok("消费明细按日期分组，每组带当天小计");
 
   const metaText = String(recordRows[0]?.textContent ?? "");
   if (!/餐饮|娱乐|交通/.test(metaText) || !/\d{2}:\d{2}/.test(metaText)) {

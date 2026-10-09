@@ -2032,9 +2032,12 @@ a {
   border-color: var(--color-danger-light);
 }
 
-/* ============ 对话页 ============ */
 /* ============================================================
-   账单页：日期区间（默认本月开头 → 今天）+ 区间合计 + 分类构成 + 逐条明细
+   账单页：日期区间（默认本月开头 → 今天） + 环形图区间概览 + 逐条明细
+
+   字号层级（全页只这几档，不再各写各的）：
+     页面标题 2xl/600 → 卡片小标题 base/600 → 环形图圆心金额 xl/800
+     → 指标值 base/600 → 正文（分类名、商品名）sm/500 → 辅助说明 xs/400
    ============================================================ */
 .bills-header {
   position: relative;
@@ -2042,79 +2045,186 @@ a {
   background: var(--bg-secondary);
 }
 
-.bills-header__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-1);
+.bills-title {
+  margin: 0;
 }
 
-.bills-header__hint {
+.bills-subtitle {
+  margin: var(--space-1) 0 0;
   font-size: var(--text-xs);
   color: var(--text-tertiary);
-  line-height: var(--leading-relaxed);
+  line-height: var(--leading-normal);
 }
 
-/* 日期区间：开始 / 结束各一个输入框，中间用箭头连起来 */
-.bills-range__row {
+/* ---------- 日期区间 ---------- */
+.bills-range {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* 开始 / 结束等宽，中间只留一个「至」字 */
+.bills-range__grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
   gap: var(--space-2);
 }
 
 .bills-range__field {
   display: flex;
-  flex: 1;
   min-width: 0;
   flex-direction: column;
   gap: var(--space-1);
 }
 
 .bills-range__label {
-  padding: 0 var(--space-1);
+  padding-left: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-tertiary);
+}
+
+.bills-range__sep {
+  padding-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-placeholder);
+}
+
+/* ---------- 区间概览：环形图 + 关键指标 ---------- */
+.bills-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* 卡片小标题降一档：比页面标题小，比正文重 */
+.bills-section-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  letter-spacing: -0.01em;
+}
+
+.bills-overview__body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* 环形图：左边定宽，右边的指标列表自适应 */
+.bills-donut {
+  position: relative;
+  flex-shrink: 0;
+  width: clamp(128px, 36vw, 164px);
+  height: clamp(128px, 36vw, 164px);
+}
+
+.bills-donut__chart {
+  position: absolute;
+  inset: 0;
+}
+
+.bills-donut__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.bills-donut__track {
+  fill: none;
+  stroke: var(--surface-active);
+  stroke-width: 13;
+}
+
+.bills-donut__arc {
+  fill: none;
+  stroke-width: 13;
+  transition: stroke-dasharray var(--duration-medium) var(--ease-out);
+}
+
+/* 圆心放区间合计：宽度限制在内圈里，位数多了由 JS 加 is-long 降一档字号 */
+.bills-donut__center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: 64%;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.bills-donut__caption {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
-.bills-range__arrow {
-  flex-shrink: 0;
-  padding-bottom: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--text-placeholder);
-}
-
-/* 区间合计 */
-.bills-sum {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-  text-align: center;
-}
-
-.bills-sum__caption {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-.bills-sum__amount {
-  margin: 0;
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
+.bills-donut__total {
+  max-width: 100%;
+  font-size: var(--text-xl);
+  font-weight: var(--font-extrabold);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
-  line-height: var(--leading-tight);
 }
 
-.bills-sum__meta {
+.bills-donut__total.is-long {
+  font-size: var(--text-lg);
+}
+
+.bills-donut__meta {
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
-/* 分类构成：色点 + 分类名 + 占比 + 金额 + 占比条 */
+/* 指标：标签在左、数值在右，三行竖向均分，跟环形图等高 */
+.bills-stats {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bills-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.bills-stat:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.bills-stat__label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.bills-stat__value {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+/* ---------- 分类榜：占比由环形图承担，这里只列数字 ---------- */
 .bills-cats {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-light);
 }
 
 .bills-cat {
@@ -2122,12 +2232,13 @@ a {
   grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-1) 0;
 }
 
 .bills-cat__dot {
   flex-shrink: 0;
-  width: 0.625rem;
-  height: 0.625rem;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: var(--radius-full);
 }
 
@@ -2135,6 +2246,7 @@ a {
   min-width: 0;
   overflow: hidden;
   font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2151,24 +2263,40 @@ a {
   color: var(--text-primary);
 }
 
-/* 占比条占满整行，单独放在第二排 */
-.bills-cat__track {
-  grid-column: 1 / -1;
-  height: 0.375rem;
-  overflow: hidden;
-  background: var(--surface-active);
-  border-radius: var(--radius-full);
-}
-
-.bills-cat__fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  transition: width var(--duration-fast) var(--ease-out);
-}
-
-/* 逐条明细 */
+/* ---------- 逐条明细：按日期分组，组内是一张张小卡片 ---------- */
 .bills-records {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.bills-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bills-day__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+.bills-day__date {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+}
+
+.bills-day__total {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-tertiary);
+}
+
+.bills-day__list {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -2181,18 +2309,15 @@ a {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.bills-record:last-child {
-  border-bottom: none;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
 }
 
 .bills-record__dot {
   flex-shrink: 0;
-  width: 0.625rem;
-  height: 0.625rem;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: var(--radius-full);
 }
 
@@ -2208,6 +2333,7 @@ a {
   min-width: 0;
   overflow: hidden;
   font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2220,7 +2346,7 @@ a {
 
 .bills-record__amount {
   flex-shrink: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
@@ -2231,8 +2357,9 @@ a {
   font-size: var(--text-sm);
   color: var(--text-tertiary);
   text-align: center;
-  list-style: none;
 }
+
+/* ============ 对话页 ============ */
 
 .chat-header {
   position: relative;

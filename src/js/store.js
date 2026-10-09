@@ -1,6 +1,15 @@
 /** 应用状态：账单记录 + 设置（localStorage 持久化） */
 
-import { dateKey, normalizeDateKey, monthKey, parseAmount, round2, today, uid } from "./util.js";
+import {
+  dateKey,
+  fromKey,
+  monthKey,
+  normalizeDateKey,
+  parseAmount,
+  round2,
+  today,
+  uid,
+} from "./util.js";
 
 const STORAGE_KEY = "ai-ledger/v1";
 /** 本地数据损坏读不出来时，先把原始内容备份到这里，避免被下一次写入覆盖掉 */
@@ -554,6 +563,28 @@ export function sumByCategory(records) {
       percent: sum > 0 ? (amount / sum) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
+}
+
+/** 区间跨越的天数（闭区间，含首尾）；任一端为空 / 不合法时返回 0 */
+export function daysBetween(start, end) {
+  const from = fromKey(start);
+  const to = fromKey(end);
+  if (!from || !to) return 0;
+  return Math.max(1, Math.round((to - from) / 86400000) + 1);
+}
+
+/** 明细按日期分组（沿用传入顺序，通常已由 recordsInRange 排成日期倒序） */
+export function groupRecordsByDate(records) {
+  const groups = new Map();
+  for (const record of records ?? []) {
+    if (!groups.has(record.date)) groups.set(record.date, []);
+    groups.get(record.date).push(record);
+  }
+  return [...groups.entries()].map(([date, list]) => ({
+    date,
+    total: round2(list.reduce((sum, record) => sum + record.amount, 0)),
+    records: list,
+  }));
 }
 
 /* ---------------- 写入 ---------------- */

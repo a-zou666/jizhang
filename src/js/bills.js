@@ -3,9 +3,23 @@
  *
  * 区间默认「本月 1 号 → 今天」，开始 / 结束都能单独改（也可以点快捷区间一键切）。
  * 这里只做统计与展示，不改动任何账目 —— 与首页（按天看）、对话页（AI 记账）分开。
+ *
+ * 页面结构（自上而下三块）：
+ *   ① 日期区间：开始 / 结束 + 快捷区间
+ *   ② 区间概览：环形图（各分类占比，圆心是区间合计）+ 三个关键指标 + 分类金额榜
+ *   ③ 消费明细：按日期分组，每行给出分类 · 时间 · 金额
+ * 统计用的纯函数（recordsInRange / sumByCategory / daysBetween / groupRecordsByDate）
+ * 都放在 store.js 的数据层，不依赖 DOM，能直接在 node:test 里单测。
  */
 
-import { categoryColor, getRecords, recordsInRange, sumByCategory } from "./store.js";
+import {
+  categoryColor,
+  daysBetween,
+  getRecords,
+  groupRecordsByDate,
+  recordsInRange,
+  sumByCategory,
+} from "./store.js";
 import { toast } from "./ui.js";
 import {
   $,
@@ -71,15 +85,22 @@ export function renderBills() {
 
   const records = recordsInRange(getRecords(), range.start, range.end);
   const total = round2(records.reduce((sum, record) => sum + record.amount, 0));
+  const totalText = yuan(total);
 
   $("#billsRangeText").textContent = rangeText();
-  $("#billsTotal").textContent = yuan(total);
-  $("#billsCount").textContent = records.length
-    ? `${records.length} 笔 · 日均 ${yuan(avgPerDay(total, records))}`
-    : "这个区间还没有账目";
+
+  // 圆心金额：位数多了就降一档字号，避免撑破圆环内圈
+  const totalNode = $("#billsTotal");
+  totalNode.textContent = totalText;
+  totalNode.classList.toggle("is-long", totalText.length > 8);
+  $("#billsCount").textContent = records.length ? `${records.length} 笔` : "还没有账目";
 
   renderPresets();
-  renderCategories(records);
+  renderStats(records, total);
+  // 分类汇总一次，环形图和下面的分类榜共用同一份数据
+  const cats = sumByCategory(records);
+  renderDonut(cats);
+  renderCategories(cats);
   renderRecords(records);
 }
 
@@ -91,18 +112,12 @@ function avgPerDay(total, records) {
 }
 
 function daysInRange(records) {
-  if (range.start && range.end) {
-    const from = fromKey(range.start);
-    const to = fromKey(range.end);
-    if (from && to) return Math.max(1, Math.round((to - from) / 86400000) + 1);
-    return 1;
-  }
-  // 不限区间：用最早一笔到今天（或最晚一笔）来估
+  const bounded = daysBetween(range.start, range.end);
+  if (bounded) return bounded;
+  // 不限区间：用最早一笔到最晚一笔来估
   const dates = records.map((record) => record.date).sort();
-  const from = fromKey(dates[0]);
-  const to = fromKey(dates[dates.length - 1]);
-  if (!from || !to) return 1;
-  return Math.max(1, Math.round((to - from) / 86400000) + 1);
+  if (!dates.length) return 1;
+  return daysBetween(dates[0], dates[dates.length - 1]) || 1;
 }
 
 function rangeText() {
@@ -110,7 +125,8 @@ function rangeText() {
   if (range.start === range.end) return dateLabel(range.start);
   const from = range.start ? dateLabel(range.start) : "最早";
   const to = range.end ? dateLabel(range.end) : "至今";
-  return `${from} → ${to}`;
+  const days = daysBetween(range.start, range.end);
+  return days ? `${from} → ${to} · 共 ${days} 天` : `${from} → ${to}`;
 }
 
 function dateLabel(key) {
@@ -121,6 +137,16 @@ function dateLabel(key) {
     return `${date.getMonth() + 1}月${date.getDate()}日`;
   }
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+/** 分组标题里的星期；今天直接写「今天」，比星期更好认 */
+function weekdayText(key) {
+  const date = fromKey(key);
+  if (!date) return "";
+  if (key === dateKey(today())) return "今天";
+  return WEEKDAYS[date.getDay()] ?? "";
 }
 
 /** 记账时间（HH:MM），来自记录创建时间戳；老数据没有就留空 */
@@ -153,13 +179,75 @@ function renderPresets() {
   );
 }
 
+/* ---------------- 环形图 ----------------
+ * SVG 用 100×100 的 viewBox：半径 42、线宽 13，环带外沿 48.5 不会溢出。
+ * 每段用 stroke-dasharray 画自己那一份周长，段与段之间留 GAP 个单位当缝隙。
+ */
+const DONUT_R = 42;
+const DONUT_C = 2 * Math.PI * DONUT_R;
+const DONUT_GAP = 1.8;
+
+function renderDonut(cats) {
+  const box = $("#billsDonut");
+  if (!box) return;
+
+  const track = `<circle class="bills-donut__track" cx="50" cy="50" r="${DONUT_R}" />`;
+  const open = `<svg class="bills-donut__svg" viewBox="0 0 100 100" role="presentation">`;
+  const close = "</svg>";
+
+  if (!cats.length) {
+    box.innerHTML = `${open}${track}${close}`;
+    return;
+  }
+
+  let offset = 0;
+  const arcs = cats
+    .map((item) => {
+      const span = (item.percent / 100) * DONUT_C;
+      // 扣掉缝隙，但至少留一点长度，免得占比极小的分类整段消失
+      const length = Math.max(span - DONUT_GAP, 0.8);
+      const arc =
+        `<circle class="bills-donut__arc" cx="50" cy="50" r="${DONUT_R}" ` +
+        `stroke-dasharray="${length.toFixed(2)} ${(DONUT_C - length).toFixed(2)}" ` +
+        `stroke-dashoffset="${(-offset).toFixed(2)}" ` +
+        `style="stroke:${categoryColor(item.category)}" />`;
+      offset += span;
+      return arc;
+    })
+    .join("");
+
+  // 从 12 点方向顺时针开始画
+  box.innerHTML = `${open}${track}<g class="bills-donut__arcs" transform="rotate(-90 50 50)">${arcs}</g>${close}`;
+}
+
+/* ---------------- 关键指标 ---------------- */
+function renderStats(records, total) {
+  const box = $("#billsStats");
+  if (!box) return;
+
+  const max = records.reduce((peak, record) => Math.max(peak, record.amount), 0);
+  const rows = [
+    { label: "笔数", value: `${records.length} 笔` },
+    { label: "日均", value: yuan(avgPerDay(total, records)) },
+    { label: "最大单笔", value: yuan(max) },
+  ];
+
+  box.replaceChildren(
+    ...rows.map((row) =>
+      el("li", { class: "bills-stat" }, [
+        el("span", { class: "bills-stat__label", text: row.label }),
+        el("span", { class: "bills-stat__value t-numeric", text: row.value }),
+      ]),
+    ),
+  );
+}
+
 /* ---------------- 各分类金额 ---------------- */
-function renderCategories(records) {
+function renderCategories(cats) {
   const box = $("#billsCats");
   const countLabel = $("#billsCatCount");
   if (!box) return;
 
-  const cats = sumByCategory(records);
   if (countLabel) countLabel.textContent = cats.length ? `${cats.length} 个分类` : "";
 
   if (!cats.length) {
@@ -179,18 +267,12 @@ function renderCategories(records) {
         el("span", { class: "bills-cat__name", text: item.category }),
         el("span", { class: "bills-cat__percent t-numeric", text: `${item.percent.toFixed(1)}%` }),
         el("span", { class: "bills-cat__amount t-numeric", text: yuan(item.amount) }),
-        el("span", { class: "bills-cat__track" }, [
-          el("span", {
-            class: "bills-cat__fill",
-            style: `width:${item.percent.toFixed(1)}%;background:${color}`,
-          }),
-        ]),
       ]);
     }),
   );
 }
 
-/* ---------------- 逐条明细 ---------------- */
+/* ---------------- 逐条明细（按日期分组） ---------------- */
 function renderRecords(records) {
   const list = $("#billsList");
   const countLabel = $("#billsListCount");
@@ -198,30 +280,46 @@ function renderRecords(records) {
 
   if (countLabel) countLabel.textContent = records.length ? `${records.length} 笔` : "";
   if (!records.length) {
-    list.replaceChildren(el("li", { class: "bills-empty", text: "这个区间还没有账目" }));
+    list.replaceChildren(el("p", { class: "bills-empty", text: "这个区间还没有账目" }));
     return;
   }
 
   list.replaceChildren(
-    ...records.map((record) => {
-      const time = timeText(record);
-      return el("li", { class: "bills-record" }, [
-        el("span", {
-          class: "bills-record__dot",
-          "aria-hidden": "true",
-          style: `background:${categoryColor(record.category)}`,
-        }),
-        el("span", { class: "bills-record__main" }, [
-          el("span", { class: "bills-record__item", text: record.item }),
-          // 分类 · 日期 时间 —— 一眼看到这笔属于哪一类、什么时候花的
+    ...groupRecordsByDate(records).map((group) =>
+      el("section", { class: "bills-day" }, [
+        el("header", { class: "bills-day__head" }, [
+          // 日期 + 星期（今天直接写「今天」），右边是当天小计
           el("span", {
-            class: "bills-record__meta",
-            text: `${record.category} · ${dateLabel(record.date)}${time ? ` ${time}` : ""}`,
+            class: "bills-day__date",
+            text: `${dateLabel(group.date)} · ${weekdayText(group.date)}`,
           }),
+          el("span", { class: "bills-day__total t-numeric", text: yuan(group.total) }),
         ]),
-        el("span", { class: "bills-record__amount t-numeric", text: yuan(record.amount) }),
-      ]);
-    }),
+        el(
+          "ul",
+          { class: "bills-day__list" },
+          group.records.map((record) => {
+            const time = timeText(record);
+            return el("li", { class: "bills-record" }, [
+              el("span", {
+                class: "bills-record__dot",
+                "aria-hidden": "true",
+                style: `background:${categoryColor(record.category)}`,
+              }),
+              el("span", { class: "bills-record__main" }, [
+                el("span", { class: "bills-record__item", text: record.item }),
+                // 分类 · 记账时间 —— 日期已经在分组标题上，行内不再重复
+                el("span", {
+                  class: "bills-record__meta",
+                  text: `${record.category}${time ? ` · ${time}` : ""}`,
+                }),
+              ]),
+              el("span", { class: "bills-record__amount t-numeric", text: yuan(record.amount) }),
+            ]);
+          }),
+        ),
+      ]),
+    ),
   );
 }
 
