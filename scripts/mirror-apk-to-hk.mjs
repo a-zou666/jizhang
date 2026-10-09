@@ -230,6 +230,44 @@ async function downloadTo(url, destPath, { expectedSize = 0 } = {}) {
    Gitee：只推清单
    ========================================================================== */
 
+/**
+ * 判断是不是「网络层抖动」——值得重试的错误。
+ *
+ * 只对连接类问题重试：Node 的 fetch 把底层网络错误裹成 `TypeError: fetch failed`
+ * 并把真因塞在 `error.cause`（超时是 `UND_ERR_CONNECT_TIMEOUT`、被重置是
+ * `ECONNRESET`），另外 `AbortSignal.timeout` 触发的是 `TimeoutError`。
+ *
+ * **4xx / 5xx 业务错误一律不重试**：令牌坏了、仓库名写错了，重试一百次也是
+ * 同一个结果，只会把日志刷满、还拖慢 cron。
+ */
+export function isTransientNetworkError(error) {
+  if (!error) return false;
+  if (error.name === "TimeoutError" || error.name === "AbortError") return true;
+  const code = error.cause?.code ?? error.code ?? "";
+  if (["UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EAI_AGAIN"].includes(code)) {
+    return true;
+  }
+  // 业务错误（我们自己在 gitee() 里抛的）带 `HTTP xxx`，明确不算抖动
+  return /fetch failed/i.test(error.message ?? "") && !/HTTP \d/.test(error.message ?? "");
+}
+
+/** 重试包装：指数退避（0.8s / 2.4s / 5.6s），只重试网络抖动 */
+async function withRetry(fn, { attempts = 4, onRetry, label = "请求" } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts || !isTransientNetworkError(error)) throw error;
+      const wait = Math.round(800 * 3 ** (attempt - 1));
+      onRetry?.(attempt, describeFetchError(error), wait);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+  throw new Error(`${label}失败：${describeFetchError(lastError)}`);
+}
+
 async function gitee(path, { method = "GET", token, body, form, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const url = new URL(`${GITEE_API}${path}`);
   const headers = { "User-Agent": "ai-ledger-mirror" };
@@ -268,44 +306,62 @@ async function gitee(path, { method = "GET", token, body, form, timeoutMs = REQU
  * 和 publish-gitee-release.mjs 里的做法一致：**先删同名旧附件再传**。
  * Gitee 附件允许重名，不删的话每次发布会多一份，列表越堆越长。
  * 但这次传的只有几百字节，删+传总共一两秒。
+ *
+ * 整段都包了退避重试：Gitee 偶发连接超时（实测撞到过
+ * `UND_ERR_CONNECT_TIMEOUT`，同一时刻 curl 却是 200），而重传几百字节
+ * 几乎没成本，重试几次比让 cron 报错划算得多。
  */
-async function pushManifestToGitee({ owner, repo, tag, token, manifestPath, releaseBody, branch }) {
+async function pushManifestToGitee({ owner, repo, tag, token, manifestPath, releaseBody, branch, onRetry }) {
+  const retry = { onRetry, label: "推送清单到 Gitee" };
+
   let releaseId = null;
   try {
-    const release = await gitee(`/repos/${owner}/${repo}/releases/tags/${tag}`, { token });
-    releaseId = release?.id ?? null;
+    releaseId = await withRetry(async () => {
+      const release = await gitee(`/repos/${owner}/${repo}/releases/tags/${tag}`, { token });
+      return release?.id ?? null;
+    }, retry);
   } catch {
-    /* 还没建过，下面创建 */
+    /* 404 说明还没建过（或刚被读失败），下面走创建分支 */
   }
 
   if (!releaseId) {
     const payload = { tag_name: tag, name: `${owner}/${repo} 最新版`, body: releaseBody };
     if (branch) payload.target_commitish = branch;
-    const created = await gitee(`/repos/${owner}/${repo}/releases`, { method: "POST", token, body: payload });
+    const created = await withRetry(
+      () => gitee(`/repos/${owner}/${repo}/releases`, { method: "POST", token, body: payload }),
+      retry,
+    );
     releaseId = created.id;
     console.log(`[mirror] Gitee Release #${releaseId} 已创建`);
   }
 
-  const files = await gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, { token });
   const name = basename(manifestPath);
-  const previous = (Array.isArray(files) ? files : []).find((f) => (f.name ?? f.title) === name);
-  if (previous?.id) {
-    await gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files/${previous.id}`, {
-      method: "DELETE",
-      token,
-    });
+  const previousId = await withRetry(async () => {
+    const files = await gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, { token });
+    return (Array.isArray(files) ? files : []).find((f) => (f.name ?? f.title) === name)?.id ?? null;
+  }, retry);
+  if (previousId) {
+    await withRetry(
+      () => gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files/${previousId}`, { method: "DELETE", token }),
+      retry,
+    );
     console.log(`[mirror] 已删除 Gitee 上的旧 ${name}`);
   }
 
-  const form = new FormData();
-  form.append("access_token", token);
-  form.append("file", new Blob([readFileSync(manifestPath)]), name);
-  // 几百字节，30 秒超时绰绰有余
-  await gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, {
-    method: "POST",
-    form,
-    timeoutMs: REQUEST_TIMEOUT_MS,
-  });
+  // 每次尝试都要**重新构造 FormData**：FormData / Blob 是一次性的，
+  // 把同一个实例重放给 fetch，某些实现下会直接失败（publish-gitee-release 踩过）。
+  const body = readFileSync(manifestPath);
+  await withRetry(() => {
+    const form = new FormData();
+    form.append("access_token", token);
+    form.append("file", new Blob([body]), name);
+    // 几百字节，30 秒超时绰绰有余
+    return gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, {
+      method: "POST",
+      form,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    });
+  }, retry);
   console.log(`[mirror] 已推送 ${name} 到 Gitee（${statSync(manifestPath).size} 字节）`);
 }
 
@@ -360,6 +416,39 @@ function selfTest() {
   check("仓库坐标解析", normalizeRepo("a-zou666/jizhang"), { owner: "a-zou666", repo: "jizhang" });
   check("仓库坐标带空格能容错", normalizeRepo("  a-zou666/jizhang "), { owner: "a-zou666", repo: "jizhang" });
   check("非法坐标返回 null", normalizeRepo("jizhang"), null);
+
+  // 重试判定：网络抖动要重试，业务错误（4xx/令牌坏）绝不能重试 ——
+  // 后者重试一百次也是同样结果，只会刷满日志、拖慢 cron。
+  check(
+    "连接超时要重试（实测撞到过）",
+    isTransientNetworkError(
+      Object.assign(new TypeError("fetch failed"), {
+        cause: Object.assign(new Error("Connect TimeoutError"), { code: "UND_ERR_CONNECT_TIMEOUT" }),
+      }),
+    ),
+    true,
+  );
+  check(
+    "连接被重置要重试",
+    isTransientNetworkError(
+      Object.assign(new TypeError("fetch failed"), {
+        cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }),
+      }),
+    ),
+    true,
+  );
+  check("AbortSignal 超时要重试", isTransientNetworkError(Object.assign(new Error("x"), { name: "TimeoutError" })), true);
+  check(
+    "业务错误（HTTP 404）不重试",
+    isTransientNetworkError(new Error("Gitee GET /repos/a/b 失败（HTTP 404）：Not Found Project")),
+    false,
+  );
+  check(
+    "业务错误（HTTP 401 坏令牌）不重试",
+    isTransientNetworkError(new Error("Gitee POST /repos/a/b/releases 失败（HTTP 401）：token 无效")),
+    false,
+  );
+  check("普通错误不重试", isTransientNetworkError(new Error("boom")), false);
 
   let failed = 0;
   for (const item of cases) {
@@ -510,6 +599,9 @@ async function main() {
     releaseBody:
       `本 Release 由香港中转机（${publicBase}）自动维护。\n` +
       "App 从附件 latest.json 获取版本信息，APK 本体走中转机直链。",
+    onRetry: (attempt, reason, wait) => {
+      console.warn(`[mirror] Gitee 抖动（${reason}），第 ${attempt} 次重试，${wait}ms 后…`);
+    },
   });
 
   console.log(`[mirror] 完成：版本 ${version}，APK ${downloaded.length} 个，清单已上 Gitee`);
