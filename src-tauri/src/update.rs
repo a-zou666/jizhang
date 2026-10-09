@@ -193,7 +193,22 @@ impl UpdateManifest {
 ///
 /// 注意：无论「连不上服务器」还是「已是最新版」都返回 Ok，用 ok 字段区分。
 /// 这样前端只需要处理一种返回形状，不用把网络错误当成 invoke 异常来 catch。
+///
+/// ## `rename_all = "camelCase"` 不能省
+///
+/// Tauri 的 `invoke` 就是拿 serde 原样序列化，**不会**自动把 snake_case 转成
+/// camelCase。而这个结构体是全项目唯一带多词字段的返回体（其它那边只有
+/// `ok` / `message` / `models` 这种单词，怎么写都一样），于是很容易漏。
+///
+/// 漏掉的后果极其隐蔽：JS 里读 `result.hasUpdate` 得到 `undefined`，
+/// `Boolean(undefined)` 是 `false` —— App **能连上、能验签、能拿到 0.1.7 清单，
+/// 却一口咬定「已是最新」**，而且不报任何错。`currentVersion` 也一样读不到，
+/// 前端只能回退到传进去的 `APP_VERSION`，于是弹窗里显示的「当前版本 v0.1.6」
+/// 看上去完全正常，进一步掩盖了问题。
+///
+/// 所以这里必须显式声明，且最好在测试里钉死（见 `update_check_result_uses_camel_case`）。
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateCheckResult {
     pub ok: bool,
     pub message: String,
@@ -437,6 +452,45 @@ mod tests {
     #[test]
     fn releases_page_matches_constant() {
         assert_eq!(releases_page(), RELEASES_PAGE);
+    }
+
+    /// 返回给前端的字段名必须是 camelCase。
+    ///
+    /// 这条是拿真实事故换来的：漏了 `rename_all` 时，App 能连上、能验签、
+    /// 能拿到最新的 0.1.7 清单，却因为读不到 `hasUpdate`（实际是 `has_update`）
+    /// 而一直显示「已是最新」，且**不报任何错**，排查成本极高。
+    #[test]
+    fn update_check_result_uses_camel_case() {
+        let json = serde_json::to_value(UpdateCheckResult {
+            ok: true,
+            message: "m".into(),
+            latest_version: "0.1.7".into(),
+            current_version: "0.1.6".into(),
+            has_update: true,
+            notes: "n".into(),
+            download_url: "d".into(),
+            page_url: "p".into(),
+            hint: "h".into(),
+        })
+        .expect("序列化不该失败");
+
+        // 前端读的就是这几个名字，一个都不能变
+        for key in [
+            "hasUpdate",
+            "latestVersion",
+            "currentVersion",
+            "downloadUrl",
+            "pageUrl",
+        ] {
+            assert!(json.get(key).is_some(), "返回体缺少 camelCase 字段 {key}");
+        }
+        // 反过来，snake_case 不该出现在返回体里
+        for key in ["has_update", "latest_version", "current_version", "download_url"] {
+            assert!(
+                json.get(key).is_none(),
+                "返回体不该出现 snake_case 字段 {key}（前端读不到）"
+            );
+        }
     }
 
     #[test]
