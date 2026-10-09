@@ -136,7 +136,10 @@ export function buildReleaseBody({ tag, name, body, branch }) {
    HTTP
    ========================================================================== */
 
-async function gitee(path, { method = "GET", token, body, form } = {}) {
+/** 普通请求（JSON / 小文件）的超时；上传附件会单独放宽 */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+async function gitee(path, { method = "GET", token, body, form, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const url = new URL(`${API}${path}`);
   const headers = { "User-Agent": "ai-ledger-ci" };
   let payload;
@@ -156,7 +159,7 @@ async function gitee(path, { method = "GET", token, body, form } = {}) {
     }
   }
 
-  const response = await fetch(url, { method, headers, body: payload });
+  const response = await fetch(url, { method, headers, body: payload, signal: AbortSignal.timeout(timeoutMs) });
   const text = await response.text();
   let json = null;
   try {
@@ -169,6 +172,22 @@ async function gitee(path, { method = "GET", token, body, form } = {}) {
     throw new Error(`Gitee ${method} ${path} 失败（HTTP ${response.status}）：${detail}`);
   }
   return json;
+}
+
+/**
+ * 把 fetch 抛出的 `TypeError: fetch failed` 还原成能看懂的话。
+ *
+ * Node 的 fetch 把底层网络错误全裹成一句 `fetch failed`，真正的原因
+ * （超时 / 连接被重置 / DNS / TLS）藏在 `error.cause` 里。不把它挖出来，
+ * CI 日志就只有 `失败：fetch failed`，等于没说。
+ */
+function describeFetchError(error) {
+  if (error?.name === "AbortError" || error?.name === "TimeoutError") return "请求超时";
+  const cause = error?.cause;
+  if (!cause) return error?.message ?? String(error);
+  const code = cause.code ?? cause.errno ?? "";
+  const detail = cause.message ?? cause.toString();
+  return code ? `${detail}（${code}）` : detail;
 }
 
 /**
@@ -271,11 +290,36 @@ async function removeAttachment({ owner, repo, releaseId, fileId, token }) {
   });
 }
 
-async function uploadAttachment({ owner, repo, releaseId, token, filePath }) {
-  return gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, {
-    method: "POST",
-    form: fileForm(filePath, { access_token: token }),
-  });
+/**
+ * 上传一个附件。
+ *
+ * 这里必须**单独处理 + 重试**，不能直接用普通请求那套：
+ * - APK 有 9MB 左右，Gitee 上传附件是转对象存储，耗时可能上百秒，默认 30s 会超时；
+ * - 大文件上传偶发连接被重置（Node 只给一句 `fetch failed`），重试一次基本就过了。
+ * 每次重试都重新构造 FormData：FormData / Blob 是「一次性」的，重放同一个实例在
+ * 某些实现下会直接失败。
+ */
+const UPLOAD_TIMEOUT_MS = 300_000;
+const UPLOAD_ATTEMPTS = 3;
+
+async function uploadAttachment({ owner, repo, releaseId, token, filePath, onRetry }) {
+  let lastError;
+  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      return await gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, {
+        method: "POST",
+        form: fileForm(filePath, { access_token: token }),
+        timeoutMs: UPLOAD_TIMEOUT_MS,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < UPLOAD_ATTEMPTS) {
+        onRetry?.(attempt, describeFetchError(error));
+        await new Promise((resolve) => setTimeout(resolve, 3000 * attempt));
+      }
+    }
+  }
+  throw new Error(`上传 ${basename(filePath)} 失败（重试 ${UPLOAD_ATTEMPTS} 次）：${describeFetchError(lastError)}`);
 }
 
 /* ==========================================================================
@@ -295,6 +339,21 @@ function selfTest() {
   check("识别 armeabi", abiOfApk("app-armeabi-v7a-release.apk"), "arm");
   check("非 apk 返回 null", abiOfApk("latest.json"), null);
   check("x86 不认识", abiOfApk("app-x86_64-release.apk"), null);
+
+  // fetch failed 要能翻译出底层原因，否则 CI 日志等于没说
+  check(
+    "fetch failed 带 cause 时透出底层原因",
+    describeFetchError(Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }),
+    })),
+    "read ECONNRESET（ECONNRESET）",
+  );
+  check(
+    "超时单独报",
+    describeFetchError(Object.assign(new Error("x"), { name: "TimeoutError" })),
+    "请求超时",
+  );
+  check("没有 cause 时退回 message", describeFetchError(new Error("boom")), "boom");
 
   const picked = pickReleaseApks([
     "app-arm64-release-unsigned.apk",
@@ -454,7 +513,17 @@ async function main() {
       console.log(`  - 覆盖旧附件 ${name}`);
     }
     const size = statSync(filePath).size;
-    await uploadAttachment({ owner, repo, releaseId, token, filePath });
+    console.log(`  ↑ 上传中 ${name}（${(size / 1024 / 1024).toFixed(2)} MB）…`);
+    await uploadAttachment({
+      owner,
+      repo,
+      releaseId,
+      token,
+      filePath,
+      onRetry: (attempt, reason) => {
+        console.warn(`  ! ${name} 第 ${attempt} 次失败（${reason}），重试…`);
+      },
+    });
     console.log(`  + 已上传 ${name}（${(size / 1024 / 1024).toFixed(2)} MB）`);
   }
 
