@@ -18,6 +18,10 @@
  *   GITEE_RELEASE_TAG     可选，默认 latest
  * 缺 GITEE_TOKEN → 打印说明并退出 0（CI 不红，只是这次不推 Gitee）。
  *
+ * 分支：建 Release 时用的 `target_commitish` 从仓库接口读 `default_branch`。
+ * **不要写死** —— GitHub 默认分支是 `main`，Gitee 是 `master`；写死错的名字
+ * 时 Gitee 会返回 HTTP 404「Not Found Project」，很容易误判成「仓库不存在」。
+ *
  * 用法：
  *   node scripts/publish-gitee-release.mjs
  *   node scripts/publish-gitee-release.mjs --dry-run   # 只打印要发什么
@@ -114,6 +118,20 @@ export function findApks(dir) {
   return found;
 }
 
+/**
+ * 建 Release 的请求体。
+ *
+ * `branch` 为空时**必须整个省掉** `target_commitish`：传空串或传错分支名，
+ * Gitee 都会报 HTTP 404「Not Found Project」（GitHub 那边是 main，Gitee 是
+ * master，写死必然踩坑）。省掉这个字段，Gitee 会用仓库默认分支。
+ */
+export function buildReleaseBody({ tag, name, body, branch }) {
+  const payload = { tag_name: String(tag ?? "").trim(), name, body };
+  const trimmed = String(branch ?? "").trim();
+  if (trimmed) payload.target_commitish = trimmed;
+  return payload;
+}
+
 /* ==========================================================================
    HTTP
    ========================================================================== */
@@ -166,8 +184,27 @@ function fileForm(filePath, extra = {}) {
    发布流程
    ========================================================================== */
 
+/**
+ * 找仓库的默认分支。
+ *
+ * 这个值不能写死：GitHub 那边是 `main`，而 Gitee 镜像仓库默认分支是 `master`。
+ * 往 Gitee 建 Release 时如果 `target_commitish` 指向一个不存在的分支，
+ * 接口会返回 HTTP 404「Not Found Project」——看起来像「仓库不存在」，
+ * 其实只是分支名不对，很容易查错方向。
+ */
+async function defaultBranch({ owner, repo, token }) {
+  try {
+    const info = await gitee(`/repos/${owner}/${repo}`, { token });
+    const branch = String(info?.default_branch ?? "").trim();
+    if (branch) return branch;
+  } catch {
+    /* 读不到就用下方兜底 */
+  }
+  return "";
+}
+
 /** 找到 tag 对应的 Release，没有就建一个 */
-async function ensureRelease({ owner, repo, tag, token, name, body }) {
+async function ensureRelease({ owner, repo, tag, token, name, body, branch }) {
   try {
     const release = await gitee(`/repos/${owner}/${repo}/releases/tags/${tag}`, { token });
     if (release?.id) return { id: release.id, created: false };
@@ -177,7 +214,7 @@ async function ensureRelease({ owner, repo, tag, token, name, body }) {
   const created = await gitee(`/repos/${owner}/${repo}/releases`, {
     method: "POST",
     token,
-    body: { tag_name: tag, name, body, target_commitish: "main" },
+    body: buildReleaseBody({ tag, name, body, branch }),
   });
   return { id: created.id, created: true };
 }
@@ -242,6 +279,19 @@ function selfTest() {
   check("清单 arm64 直链", manifest.apk.arm64, "https://gitee.com/o/r/releases/download/latest/a64.apk");
   check("清单 arm 直链", manifest.apk.arm, "https://gitee.com/o/r/releases/download/latest/a32.apk");
   check("清单 schema", manifest.schema, 1);
+
+  // 分支名不能写死：GitHub 是 main，Gitee 是 master，传错会 404 Not Found Project
+  check("指定分支时带上 target_commitish", buildReleaseBody({ tag: "latest", name: "n", body: "b", branch: "master" }), {
+    tag_name: "latest",
+    name: "n",
+    body: "b",
+    target_commitish: "master",
+  });
+  check(
+    "没拿到分支时省掉 target_commitish（交给 Gitee 用默认分支）",
+    buildReleaseBody({ tag: "latest", name: "n", body: "b", branch: "" }),
+    { tag_name: "latest", name: "n", body: "b" },
+  );
 
   let failed = 0;
   for (const item of cases) {
@@ -331,11 +381,15 @@ async function main() {
     return;
   }
 
+  const branch = await defaultBranch({ owner, repo, token });
+  console.log(`[gitee-release] 默认分支：${branch || "（接口未返回，交给 Gitee 决定）"}`);
+
   const { id: releaseId, created } = await ensureRelease({
     owner,
     repo,
     tag,
     token,
+    branch,
     name: `${owner}/${repo} 最新版`,
     body: "本 Release 由 CI 自动维护，始终承载最新构建产物。App 从附件 latest.json 获取版本信息。",
   });
