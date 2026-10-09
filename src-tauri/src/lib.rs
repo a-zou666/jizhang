@@ -862,7 +862,7 @@ async fn list_models(protocol: String, base_url: String, api_key: String) -> Res
    软件更新
    ========================================================================== */
 
-/// 检查 Gitee 上有没有新版本。
+/// 检查自建分发服务器上有没有新版本。
 ///
 /// 返回 Ok 的形状永远一致（用 `ok` 字段表示成败），前端不必把网络故障
 /// 当成 invoke 异常来 catch；失败时额外给一句能照着做的 `hint`。
@@ -882,7 +882,7 @@ async fn check_update(current_version: String) -> Result<UpdateCheckResult, Stri
                 current,
                 error,
                 format!(
-                    "更新源在 Gitee（{}），不需要翻墙；如果一直失败，可以到发布页手动下载：{}",
+                    "更新源在自己服务器上（{}），国内直连即可；如果一直失败，可以到发布页手动下载：{}",
                     update::MANIFEST_URL,
                     update::RELEASES_PAGE
                 ),

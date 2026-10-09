@@ -35,15 +35,19 @@ export const DEFAULT_CATEGORIES = ["餐饮", "交通", "数码", "日用", "娱�
    ========================================================================== */
 
 /**
- * 更新源仓库坐标。**全项目更新源的唯一真相**（Rust 侧 update.rs 有同一份常量，
- * 那一边负责实际拉清单；这里这份用于「打开浏览器兜底」与展示，两边必须一致）。
+ * 更新源站点。**全项目更新源的唯一真相**（Rust 侧 update.rs 有同一份常量，
+ * 那一边负责实际拉清单；这里这份用于「打开浏览器兜底」与提示文案，两边必须一致）。
  *
- * 为什么是 Gitee 不是 GitHub：GitHub 国内常连不上，更新链路走 GitHub 等于永远更新不了。
- * CI 仍在 GitHub Actions 上打包签名，但产物推送到 Gitee，App 只跟 Gitee 说话。
+ * 是自己搭的分发服务器（Azure 香港），清单与 APK 都由它提供，全程 HTTPS。
+ * 曾经挂过 Gitee，但它的附件**上传**只有 10~50 KB/s，而且读清单要过两级 302
+ * 跳到带临时 token 的 CDN（foruda.gitee.com），手机移动网络下经常超时 ——
+ * 表现就是「点了检查更新却检测不到新版本」。现在整条链路只有这一台服务器。
+ *
+ * 域名是中文的 `电脑.tech`，**写成 punycode** `xn--wnyy6w.tech`：部分运行时
+ * 对 IDN 的处理不一致，写死了最稳。
  */
-export const GITEE_OWNER = "yykzz";
-export const GITEE_REPO = "jizhang";
-export const UPDATE_RELEASES_PAGE = `https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases`;
+export const UPDATE_HOST = "apk.xn--wnyy6w.tech";
+export const UPDATE_RELEASES_PAGE = `https://${UPDATE_HOST}/`;
 
 /**
  * 比较两个版本号。返回 true 表示 `remote` 比 `current` 新。

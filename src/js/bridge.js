@@ -204,7 +204,7 @@ export async function testConnection(settings) {
 /* ---------------- 软件更新 ---------------- */
 
 /**
- * 检查 Gitee 上有没有新版本。
+ * 检查自建分发服务器上有没有新版本。
  *
  * 返回形状固定为 `{ok, message, latestVersion, currentVersion, hasUpdate, notes,
  * downloadUrl, pageUrl, hint}`；网络失败也走 ok:false 而不是抛异常，

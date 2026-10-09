@@ -62,20 +62,27 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 首次安装需在系统设置里允许「安装未知来源应用」。升级安装必须用同一个签名的包，否则会提示「应用未安装」，
 需要先卸载旧版本 —— 这会清掉本机账目，**升级前建议先在设置里导出备份**。
 
-### App 内更新（走香港中转机，不需要翻墙）
+### App 内更新（走自建分发站，不需要翻墙）
 
-设置页 → **软件更新**：App 会去 Gitee 读一份几百字节的版本清单，有新版就弹出「版本号 + 更新说明」，点**立即下载**
-用系统浏览器打开 APK 直链，浏览器自动开始下载，下完点一下即可安装。
+设置页 → **软件更新**：App 去自己的分发站读一份几百字节的版本清单，有新版就弹出「版本号 + 更新说明」，
+点**立即下载**用系统浏览器打开 APK 直链，浏览器自动开始下载，下完点一下即可安装。
+
+清单与 APK 都在同一台服务器、同一个域名、同一个证书下 —— 一条链路，没有第三方跳转。
 
 | 用途 | 地址 |
 | --- | --- |
-| 版本清单（Gitee，几百字节） | `https://gitee.com/yykzz/jizhang/releases/download/latest/latest.json` |
-| APK 直链（香港中转机） | `http://104.208.75.62:9443/app-arm64-release.apk` |
-| 发布页（手动兜底） | https://gitee.com/yykzz/jizhang/releases |
+| 版本清单 | `https://apk.电脑.tech:9443/latest.json` |
+| APK 直链 | `https://apk.电脑.tech:9443/app-arm64-release.apk` |
+| 发布页（手动兜底） | `https://apk.电脑.tech:9443/` |
 
-#### 为什么要中转（实测数据）
+> 域名 `apk.电脑.tech` 在代码里写成 punycode **`apk.xn--wnyy6w.tech`**：部分运行时对中文域名的处理
+> 不一致，写 ASCII 最稳。`xn--` 后那段 base36 肉眼分不出对错（曾经把 `电脑` 误写成 `xn--nyqx68a`，
+> 那其实是 `徳健`，等于指向一个不存在的域名，症状是「点了检查更新却检测不到新版本」），
+> 所以两侧都有防回归测试：解 punycode 回中文再比对。
 
-一开始 APK 本体也放在 Gitee，但上传慢得没法用。在香港 Azure 机器上实测（2026-10-09）：
+#### 为什么不再用 Gitee（实测数据）
+
+一开始 APK 与清单都放在 Gitee，但**上传慢得没法用**。在香港 Azure 机器上实测（2026-10-09）：
 
 | 方向 | 速度 |
 | --- | --- |
@@ -86,27 +93,30 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 | GitHub Actions → Gitee 上传 8MB | **约 4~8 分钟** |
 | Gitee TCP connect / TLS 握手 | 0.46s / 0.72s（链路本身没问题） |
 
-**结论：慢的不是跨境，是 Gitee 自己的附件上传接口。** 所以「换台国内机器推 Gitee」只能快 2~3 倍，
-治不了本；而「用 Gitee 仓库 raw 存 APK」更是反模式（二进制进 git 历史永久膨胀、还同样要上传）。
+**结论：慢的不是跨境，是 Gitee 自己的附件上传接口。**
 
-真正有效的做法是**让 Gitee 不必承载 APK 本体**：
+中途试过「Gitee 只存清单、APK 走香港裸 IP」—— 也不行，有两个致命问题：
+
+1. 读清单要过 Gitee 的**两级 302**，最终落到带临时 token 的 CDN（`foruda.gitee.com`），
+   手机走移动网络经常超时 → 实测 0.1.2 **检测不到** 0.1.3。
+2. 裸 IP + `http://` 在 **Android 7+ 默认被系统拦掉**（`cleartextTrafficPermitted=false`），
+   要放行得改 AndroidManifest，而 `src-tauri/gen/` 不入库、每次 CI 重新生成，很脆。
+
+**最终方案：彻底不要第三方。** 一台服务器同时提供清单与 APK：
 
 ```
-GitHub Actions ──(5MB/s)──> GitHub Release（只存构建产物，CI 只做这一步）
-                                  │ 香港机器每 5 分钟拉取（下行 174MB/s）
-                                  ▼
-                        104.208.75.62:/var/www/apk + nginx :9443（上行 43MB/s）
-                                  │ 只把 319 字节的 latest.json 推到 Gitee
-                                  ▼
-                            Gitee Release（秒传）
-                                  │
-                                  ▼
-                      App 拉清单 → APK 从香港直链下载（实测 5.5MB/s，比 Gitee 快约 12 倍）
+GitHub Actions ──构建+签名──> GitHub Release（只存构建产物）
+                                    │ 本机每 5 分钟拉取（下行 174MB/s）
+                                    ▼
+                   /var/www/apk + nginx :9443（HTTPS，实测下载 4.7MB/s）
+                                    │
+                                    ▼
+          App → https://apk.电脑.tech:9443/latest.json（唯一地址，不再变）
 ```
 
-这样推给 Gitee 的数据量从 ~12MB 降到 **319 字节**，CI 再也不会卡在上传上。
+比 Gitee 的 463KB/s 快约 **10 倍**，一次同步全程约 10 秒。
 
-#### 中转机怎么运作
+#### 分发站怎么运作
 
 中转机（`104.208.75.62`，Ubuntu 22.04 香港 Azure）上：
 
@@ -116,16 +126,17 @@ GitHub Actions ──(5MB/s)──> GitHub Release（只存构建产物，CI 只
 | 执行封装（cron 调它） | `/home/azhou/apk-sync/mirror-run.sh` |
 | 定时任务 | `*/5 * * * *` 每 5 分钟一次 |
 | 站点根目录 | `/var/www/apk`（APK + latest.json） |
-| nginx 配置 | `/etc/nginx/sites-enabled/apk-mirror`（独立 server 块，**只监听 9443**） |
-| 密钥/配置 | `/etc/ai-ledger-mirror.env`（`chmod 600`，里面有 `GITEE_TOKEN`） |
+| nginx 配置 | `/etc/nginx/sites-enabled/apk-mirror`（独立 server 块，**只监听 9443 HTTPS**） |
+| 密钥/配置 | `/etc/ai-ledger-mirror.env`（`chmod 600`） |
+| TLS 证书 | Let's Encrypt（**DNS-01** 签发，Cloudflare 凭据在 `/etc/letsencrypt/cloudflare.ini`） |
 | 运行日志 | `/home/azhou/apk-sync/mirror.log`（自动保留最近 500 行） |
 
 脚本做的事：读 GitHub 最新 Release → 按 ABI 下 APK（先写 `.part` 再 `rename`，保证用户不会下到半截文件）
-→ 版本没变就跳过（幂等）→ 生成清单（APK 地址指向本机，`page_url` 仍指 Gitee）→ 只把清单推到 Gitee。
+→ 版本没变就跳过（幂等）→ 生成清单（清单与 APK 的地址都指向本机域名）。
 
 > **注意**：这台机器上还跑着别的东西（Caddy 占 80/8443，nginx 占 443/8888 做团队路由反代，
 > docker 跑 New API）。所以 `apk-mirror` 必须是**独立 server 块**、用**独立端口 9443**，
-> 千万不要去改现有配置。
+> 千万不要去改现有配置。也正因为 80 端口被占，证书只能用 **DNS-01** 验证（不碰任何端口）。
 
 手动触发一次同步：
 
@@ -133,6 +144,9 @@ GitHub Actions ──(5MB/s)──> GitHub Release（只存构建产物，CI 只
 ssh azhou@104.208.75.62 '/home/azhou/apk-sync/mirror-run.sh'
 ssh azhou@104.208.75.62 'tail -20 /home/azhou/apk-sync/mirror.log'
 ```
+
+证书是 90 天有效、自动续期（`certbot.timer` 每天两次），续期后由 deploy hook
+（`/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`）自动 reload nginx。
 
 > 为什么不在 App 内直接下载并静默安装：Android 7+ 安装 APK 必须走 FileProvider 生成 `content://` URI 再发
 > `ACTION_VIEW` Intent，而 Tauri 2 的 Rust 侧拿不到 Activity / JNIEnv，官方也没有对应插件；强行 JNI 调用容易

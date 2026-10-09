@@ -33,49 +33,58 @@ use serde_json::Value;
    更新源常量
    ========================================================================== */
 
-/// Gitee 仓库坐标。清单（`latest.json`）就挂在这个仓库的 Release 附件里，
-/// 换仓库只改这里两行（下面的地址常量是它的展开，Rust 的 const 不能拼接
-/// 字符串，所以那些地址仍是字面量 —— 改仓库时记得同步改）。
-pub const GITEE_OWNER: &str = "yykzz";
-pub const GITEE_REPO: &str = "jizhang";
+/// 更新源：**自建的分发服务器**（香港），清单与 APK 都从这里取。
+///
+/// ## 为什么不用 Gitee 了
+///
+/// 之前清单挂在 Gitee 的 Release 附件上，实测有两个硬伤：
+///
+/// 1. **上传慢得没法用** —— Gitee 的附件上传接口只有 10~50 KB/s
+///    （同一台机器传 GitHub 有 876 KB/s、从 Gitee 下载也有 463 KB/s），
+///    一个包要传几分钟还常超时。慢的是 Gitee 的附件服务，不是跨境。
+/// 2. **下载链路又长又脆** —— 读一个几百字节的清单要**两级 302**：
+///      gitee.com/.../releases/download/latest/latest.json
+///        └─302─> gitee.com/.../attach_files/<id>/download/latest.json
+///            └─302─> foruda.gitee.com/attach_file/<id>/latest.json?token=…&ts=…
+///    最终落在**带临时 token 的 CDN 域名**上。手机走移动网络时这条链路经常
+///    超时，表现就是「点了检查更新却检测不到新版本」。
+///
+/// 现在改成一台自己的服务器（Azure 香港）用 nginx 同时提供清单与 APK：
+/// 一条链路、一个证书、没有第三方跳转。
+///
+/// ## 为什么用域名 + HTTPS，不用裸 IP + HTTP
+///
+/// Android 7+ 默认**禁止明文 HTTP 流量**，用 `http://` 地址会被系统直接拦掉；
+/// 要放行得改 AndroidManifest，而 `src-tauri/gen/` 是 `tauri android init`
+/// 生成的、不入库，每次 CI 都得重新注入（麦克风权限已经吃过这个亏）。
+/// 加个域名走 HTTPS 这些坑全部消失。
+///
+/// 域名是中文的 `电脑.tech`，punycode 为 `xn--wnyy6w.tech`。这里**写 punycode**：
+/// 部分运行时对 IDN 的处理不一致，写死了最稳（curl / reqwest / WebView 都认）。
+pub const UPDATE_HOST: &str = "apk.xn--wnyy6w.tech";
 
-/// 更新清单地址：固定指向 Release 附件 `latest.json`。
-///
-/// 用「固定文件名的 Release 附件」而不是查询 Release 列表接口，原因是
-/// 列表接口返回数组、附件地址还要再拼一次，而且每个 tag 名字可能不同；
-/// 固定附件名让 App 端永远只认一个 URL。仓库公开时该地址匿名可下。
-///
-/// **清单留在 Gitee 是刻意的**：这个文件只有几百字节，Gitee 秒传，而国内
-/// 直连 Gitee 又快又稳。它只负责「告诉 App 有新版本、去哪儿下」。
-///
-/// tag 用固定的 `latest`（发布流程每次更新同一个 Release），这样清单地址
-/// 永远不变，App 端不用跟着版本号改代码。
-pub const MANIFEST_URL: &str = "https://gitee.com/yykzz/jizhang/releases/download/latest/latest.json";
+/// 更新清单地址。App 只认这一个 URL —— 发布流程每次覆盖同一个文件，
+/// 所以地址永远不变，不用跟着版本号改代码。
+pub const MANIFEST_URL: &str = "https://apk.xn--wnyy6w.tech/latest.json";
 
-/// APK 直链前缀（**香港中转机**，不是 Gitee）。
-///
-/// 为什么 APK 不放在 Gitee：实测 Gitee 的附件**上传**接口只有 10~50 KB/s
-/// （同一台机器传 GitHub 有 876 KB/s，从 Gitee **下载**也有 463 KB/s），
-/// 一个 8MB 的包要传好几分钟还常超时。慢的是 Gitee 的附件服务本身，不是跨境。
-///
-/// 所以改成：CI 只把 APK 传 GitHub Release（快）→ 香港机器定时拉取并挂到
-/// 自己的 nginx（上行 43MB/s）→ 只把几百字节的 `latest.json` 推给 Gitee。
-/// 详见仓库 `scripts/mirror-apk-to-hk.mjs` 与 README「更新链路」。
-///
-/// 正常情况下清单里的 `apk.arm64` / `apk.arm` 已经是**完整地址**，用不到这个
-/// 前缀；它只在清单缺地址时的兜底路径上生效。
-pub const DOWNLOAD_PREFIX: &str = "http://104.208.75.62:9443";
+/// APK 直链前缀。清单里若只给了文件名（没给完整地址），就用它拼。
+pub const DOWNLOAD_PREFIX: &str = "https://apk.xn--wnyy6w.tech";
 
-/// 发布页（找不到具体附件时兜底）。仍指向 Gitee —— 国内可达。
-pub const RELEASES_PAGE: &str = "https://gitee.com/yykzz/jizhang/releases";
+/// 发布页（找不到具体附件时兜底）。就是站点根目录。
+pub const RELEASES_PAGE: &str = "https://apk.xn--wnyy6w.tech/";
 
-/// 发布页地址。由仓库坐标拼出来 —— 这样 `GITEE_OWNER` / `GITEE_REPO`
-/// 是「活」的常量，改一处就能影响展示，不用去翻下面的字面量。
+/// 发布页地址（自建服务器，就是站点根）。
+///
+/// 保留成函数是为了不动调用方 —— `lib.rs` 里用它兜底提示文案。
 pub fn releases_page() -> String {
-    format!("https://gitee.com/{}/{}/releases", GITEE_OWNER, GITEE_REPO)
+    RELEASES_PAGE.to_string()
 }
 
-/// 拉清单的超时：国内直连 Gitee 很快，给 20s 已经很宽裕
+/// 拉清单的超时。
+///
+/// 自建服务器在香港、走 HTTPS，正常几十毫秒就回；给 20s 是给移动网络留余量。
+/// （之前挂 Gitee 时要过两级 302 跳到带临时 token 的 CDN，20s 经常不够 ——
+/// 换自建源之后这个超时已经很宽裕了。）
 const FETCH_TIMEOUT_SECS: u64 = 20;
 
 /* ==========================================================================
@@ -321,46 +330,170 @@ mod tests {
 
     #[test]
     fn releases_page_matches_constant() {
-        // 防止「改仓库坐标忘了改字面量」：两者必须永远一致
         assert_eq!(releases_page(), RELEASES_PAGE);
-        assert!(MANIFEST_URL.starts_with(&format!(
-            "https://gitee.com/{}/{}",
-            GITEE_OWNER, GITEE_REPO
-        )));
     }
 
     #[test]
-    fn download_prefix_points_to_hk_mirror() {
-        // APK 本体走香港中转机（Gitee 附件上传只有 10~50KB/s，放不住大文件）。
-        // 这里刻意断言**不是** Gitee —— 如果有人「顺手改回去」，必须让测试红，
-        // 否则又会退回到「一个包传好几分钟」的老路。
+    fn update_source_is_self_hosted_https() {
+        // 更新源必须是**自建服务器的域名**，且走 HTTPS。
+        //
+        // 这里刻意断言**不含 gitee.com** —— 之前挂 Gitee 时读清单要过两级 302
+        // 跳到带临时 token 的 CDN（foruda.gitee.com），手机移动网络下经常超时，
+        // 表现就是「点了检查更新但检测不到新版本」。如果有人「顺手改回 Gitee」，
+        // 必须让这条测试红。
+        for (label, url) in [
+            ("MANIFEST_URL", MANIFEST_URL),
+            ("DOWNLOAD_PREFIX", DOWNLOAD_PREFIX),
+            ("RELEASES_PAGE", RELEASES_PAGE),
+        ] {
+            assert!(
+                !url.contains("gitee.com"),
+                "{label} 不该再指 Gitee：{url}"
+            );
+            assert!(
+                url.starts_with("https://"),
+                "{label} 必须走 HTTPS（Android 默认拦明文 HTTP）：{url}"
+            );
+            assert!(
+                url.contains(UPDATE_HOST),
+                "{label} 必须指向 {UPDATE_HOST}：{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn update_host_is_punycode() {
+        // 域名是中文的 `电脑.tech`。这里必须写 punycode 形式 ——
+        // 部分运行时对 IDN 的处理不一致，写中文可能连不上。
+        assert_eq!(UPDATE_HOST, "apk.xn--wnyy6w.tech");
         assert!(
-            !DOWNLOAD_PREFIX.contains("gitee.com"),
-            "APK 直链前缀不该再指 Gitee：{DOWNLOAD_PREFIX}"
+            UPDATE_HOST.is_ascii(),
+            "更新源域名必须是 ASCII（punycode）：{UPDATE_HOST}"
         );
-        assert!(
-            DOWNLOAD_PREFIX.starts_with("http://") || DOWNLOAD_PREFIX.starts_with("https://"),
-            "直链前缀必须是完整地址：{DOWNLOAD_PREFIX}"
+        // 光比对字面量不够：`xn--` 前缀后是一段 base36，**很容易抄错且肉眼看不出来**
+        // （曾经把 `电脑` 写成 `xn--nyqx68a`，那其实是 `徳健`，等于指向一个不存在的域名）。
+        // 这里用 punycode 算法从字面量推导一遍，确认它确实代表 `电脑`。
+        assert_eq!(
+            decode_punycode_label("xn--wnyy6w"),
+            "电脑",
+            "更新源域名的 punycode 解不出 `电脑` —— 常量抄错了"
         );
-        // 清单地址仍留在 Gitee（几百字节，秒传，国内可达）
-        assert!(MANIFEST_URL.contains("gitee.com"));
+    }
+
+    /// RFC 3492 punycode 解码（只做单个标签，够校验用）。
+    ///
+    /// 只依赖标准库，不引第三方 crate：这点逻辑不值得多一个依赖。
+    fn decode_punycode_label(label: &str) -> String {
+        let body = label.strip_prefix("xn--").expect("应当带 xn-- 前缀");
+        // 最后一个 '-' 之前是 ASCII 基本码点，之后是增量编码
+        let (basic, encoded) = match body.rfind('-') {
+            Some(i) => (&body[..i], &body[i + 1..]),
+            None => ("", body),
+        };
+        let mut output: Vec<char> = basic.chars().collect();
+        if encoded.is_empty() {
+            return output.into_iter().collect();
+        }
+
+        const BASE: u32 = 36;
+        const TMIN: u32 = 1;
+        const TMAX: u32 = 26;
+        const SKEW: u32 = 38;
+        const DAMP: u32 = 700;
+        const INITIAL_BIAS: u32 = 72;
+        const INITIAL_N: u32 = 128;
+
+        let digit = |c: char| -> u32 {
+            match c {
+                'a'..='z' => c as u32 - 'a' as u32,
+                'A'..='Z' => c as u32 - 'A' as u32,
+                '0'..='9' => c as u32 - '0' as u32 + 26,
+                _ => panic!("非法 punycode 字符：{c}"),
+            }
+        };
+
+        let mut n = INITIAL_N;
+        let mut i: u32 = 0;
+        let mut bias = INITIAL_BIAS;
+        let mut chars = encoded.chars().peekable();
+
+        while chars.peek().is_some() {
+            let old_i = i;
+            let mut w: u32 = 1;
+            let mut k = BASE;
+            loop {
+                let c = chars.next().expect("punycode 增量编码被截断");
+                let d = digit(c);
+                i += d * w;
+                let t = if k <= bias {
+                    TMIN
+                } else if k >= bias + TMAX {
+                    TMAX
+                } else {
+                    k - bias
+                };
+                if d < t {
+                    break;
+                }
+                w *= BASE - t;
+                k += BASE;
+            }
+            let len = output.len() as u32 + 1;
+            bias = {
+                let num = if i / len == 0 { 1 } else { i / len } + 1;
+                let num = num * (BASE - TMIN) / (i - old_i + num * (BASE - TMIN));
+                DAMP * num + (DAMP * num) / (i - old_i + 1)
+            };
+            // 插到 i % len 位置（i 是 0-based 累积偏移）
+            n += i / len;
+            i %= len;
+            output.insert(i as usize, char::from_u32(n).expect("非法码点"));
+            i += 1;
+        }
+        output.into_iter().collect()
+    }
+
+    #[test]
+    fn punycode_decoder_works() {
+        // 顺手把解码器本身钉一下，免得它写错了反而让上面那个断言看着「通过」
+        assert_eq!(decode_punycode_label("xn--wnyy6w"), "电脑");
+        // 同一个域名整体解出来应当拼回中文
+        assert_eq!(
+            domain_to_unicode(UPDATE_HOST),
+            "apk.电脑.tech",
+            "更新源域名解出来不是 apk.电脑.tech"
+        );
+    }
+
+    /// 把 punycode 域名逐标签解回 Unicode（只认 `xn--` 标签，其余原样）。
+    fn domain_to_unicode(host: &str) -> String {
+        host.split('.')
+            .map(|label| {
+                if label.starts_with("xn--") {
+                    decode_punycode_label(label)
+                } else {
+                    label.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(".")
     }
 
     #[test]
     fn resolve_download_keeps_absolute_url() {
-        // 中转机清单里给的是完整 URL，拼接前缀不能把它改坏
+        // 清单里给的是完整 URL，拼接前缀不能把它改坏
         assert_eq!(
-            resolve_download("http://104.208.75.62:9443", "http://104.208.75.62:9443/app-arm64-release.apk"),
-            "http://104.208.75.62:9443/app-arm64-release.apk"
+            resolve_download("https://apk.xn--wnyy6w.tech", "https://apk.xn--wnyy6w.tech/app-arm64-release.apk"),
+            "https://apk.xn--wnyy6w.tech/app-arm64-release.apk"
         );
         assert_eq!(
-            resolve_download("http://x", "https://a.example/b.apk"),
+            resolve_download("https://x", "https://a.example/b.apk"),
             "https://a.example/b.apk"
         );
         // 相对文件名才拼前缀
-        assert_eq!(resolve_download("http://x/", "/app.apk"), "http://x/app.apk");
-        assert_eq!(resolve_download("http://x", "app.apk"), "http://x/app.apk");
-        assert_eq!(resolve_download("http://x", "  "), "");
+        assert_eq!(resolve_download("https://x/", "/app.apk"), "https://x/app.apk");
+        assert_eq!(resolve_download("https://x", "app.apk"), "https://x/app.apk");
+        assert_eq!(resolve_download("https://x", "  "), "");
     }
 
     #[test]

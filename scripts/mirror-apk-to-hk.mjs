@@ -1,41 +1,41 @@
 #!/usr/bin/env node
 /**
- * APK 中转同步：GitHub Release → 本机 nginx（:9443）→ Gitee（只推清单）。
+ * APK 中转同步：GitHub Release → 本机 nginx（HTTPS）→ App 直接从这里取。
  *
  * ## 为什么需要这个脚本
  *
- * 实测（2026-10-09，香港 Azure 机器）：
- *   香港 → GitHub 下载 7MB        5 MB/s
- *   香港 → Gitee  上传 2MB        30~50 KB/s   ← 瓶颈在这里
- *   GitHub Actions → Gitee 上传   10~24 KB/s
- *   Gitee TCP connect / TLS       0.46s / 0.72s（链路本身没问题）
+ * 两条实测结论（2026-10-09，香港 Azure 机器）：
  *
- * 结论：**慢的不是跨境，是 Gitee 自己的附件上传接口。** 所以「换台机器推 Gitee」
- * 只能快 2~3 倍，治不了本。真正的解法是**让 Gitee 不必承载 APK 本体**：
+ * 1. **Gitee 的附件上传慢得没法用** —— 香港传 Gitee 只有 30~50 KB/s
+ *    （传 GitHub 有 876 KB/s，从 Gitee **下载**也有 463 KB/s）。慢的是 Gitee
+ *    的附件服务本身，不是跨境。
+ *
+ * 2. **Gitee 的附件下载链路又长又脆** —— 读一个清单要两级 302：
+ *      gitee.com/.../releases/download/latest/latest.json
+ *        └─302─> gitee.com/yykzz/jizhang/attach_files/<id>/download/latest.json
+ *            └─302─> foruda.gitee.com/attach_file/<id>/latest.json?token=…&ts=…
+ *    最终落在一个**带临时 token 的 CDN 域名**上。手机走移动网络时这条链路
+ *    经常超时，表现为 App「点了检查更新但检测不到新版本」。
+ *
+ * 于是彻底不用 Gitee：
  *
  *   GitHub Actions ──5MB/s──> GitHub Release（只存构建产物）
  *                                    │ 本脚本下载（174MB/s 下行）
  *                                    ▼
- *                          本机 /var/www/apk + nginx :9443（43MB/s 上行）
- *                                    │ 只推 437 字节的 latest.json
+ *                      本机 /var/www/apk + nginx（HTTPS，43MB/s 上行）
+ *                                    │
  *                                    ▼
- *                              Gitee Release（秒传）
+ *              App 读 /latest.json，APK 从同一域名下（一条链路，一个证书）
  *
- * App 端 `MANIFEST_URL` 仍然指向 Gitee 的 `latest.json`（国内可达、地址不变），
- * 但清单里的 `apk.arm64` / `apk.arm` 指向本机直链。于是：
- *   - 推 Gitee 的数据量从 ~12MB 降到几百字节
- *   - 用户下载走本机 43MB/s，比 Gitee 的 463KB/s 快两个数量级
+ * App 端 `MANIFEST_URL` 与 `DOWNLOAD_PREFIX` 都指向本机域名，全程 HTTPS。
  *
  * ## 环境变量
  *
- *   GITEE_TOKEN        必填（推清单用；缺了只更新本地文件，不推 Gitee）
- *   GITEE_OWNER        可选，默认 yykzz
- *   GITEE_REPO         可选，默认 jizhang
- *   GITEE_RELEASE_TAG  可选，默认 latest
- *   GH_REPO            可选，默认 a-zou666/jizhang（GitHub 仓库坐标）
- *   PUBLIC_BASE        可选，默认 http://104.208.75.62:9443（APK 直链前缀）
- *   APK_DIR            可选，默认 /var/www/apk
- *   FORCE              设 1 时即使版本没变也重新同步
+ *   GH_REPO      可选，默认 a-zou666/jizhang（GitHub 仓库坐标）
+ *   PUBLIC_BASE  可选，默认 https://apk.xn--wnyy6w.tech（对外地址前缀）
+ *   APK_DIR      可选，默认 /var/www/apk
+ *   FORCE        设 1 时即使版本没变也重新同步
+ *   GH_TOKEN     可选，GitHub API 令牌（提一下速率限制，匿名也够用）
  *
  * ## 用法
  *
@@ -47,40 +47,33 @@
  */
 
 import { createHash } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
 
 /* ==========================================================================
    默认值
    ========================================================================== */
 
-/** 与 update.rs / store.js 的更新源保持一致 */
-const DEFAULT_OWNER = "yykzz";
-const DEFAULT_REPO = "jizhang";
-const DEFAULT_TAG = "latest";
-
 /** GitHub 仓库（构建产物的来源） */
 const DEFAULT_GH_REPO = "a-zou666/jizhang";
 
-/** APK 直链前缀：换成域名时只改这一处 */
-const DEFAULT_PUBLIC_BASE = "http://104.208.75.62:9443";
+/**
+ * 对外地址前缀。清单与 APK 都从这里取。
+ *
+ * 用域名 + HTTPS 而不是裸 IP + HTTP，原因是 **Android 7+ 默认禁止明文 HTTP**
+ * （`cleartextTrafficPermitted` 默认 false），用 `http://` 的清单地址会被系统
+ * 直接拦掉；要放行得改 AndroidManifest（而 `src-tauri/gen/` 不入库，每次 CI
+ * 都要重新注入，很脆 —— 麦克风权限已经吃过这个亏）。加个域名走 HTTPS 全解决。
+ *
+ * 域名是中文的 `电脑.tech`，punycode 为 `xn--wnyy6w.tech`。这里**写 punycode**：
+ * 部分运行时对 IDN 的处理不一致，写死了最稳。
+ */
+const DEFAULT_PUBLIC_BASE = "https://apk.xn--wnyy6w.tech";
 
 /** APK 落地目录（nginx root） */
 const DEFAULT_APK_DIR = "/var/www/apk";
 
-const GITEE_API = "https://gitee.com/api/v5";
 const GITHUB_API = "https://api.github.com";
 
 /** 下载 APK 的超时（8MB 在香港机器上不到 1 秒，给 5 分钟足够宽裕） */
@@ -138,8 +131,8 @@ export function pickLatestRelease(releases) {
   return list[0] ?? null;
 }
 
-/** 生成 App 端要读的清单。APK 地址指向本机，page_url 指向 Gitee（国内可达） */
-export function buildMirrorManifest({ version, notes, publicBase, assets, owner, repo }) {
+/** 生成 App 端要读的清单。APK 地址与 page_url 都指向本机域名 */
+export function buildMirrorManifest({ version, notes, publicBase, assets }) {
   const base = String(publicBase ?? "").replace(/\/+$/, "");
   const url = (abi) => {
     const asset = assets?.[abi];
@@ -154,7 +147,8 @@ export function buildMirrorManifest({ version, notes, publicBase, assets, owner,
       arm: url("arm"),
       universal: "",
     },
-    page_url: `https://gitee.com/${owner}/${repo}/releases`,
+    // 发布页也指本机：Gitee 整条链路已弃用，兜底不该再把人引过去
+    page_url: `${base}/`,
     published_at: new Date().toISOString(),
   };
 }
@@ -227,7 +221,7 @@ async function downloadTo(url, destPath, { expectedSize = 0 } = {}) {
 }
 
 /* ==========================================================================
-   Gitee：只推清单
+   网络重试
    ========================================================================== */
 
 /**
@@ -247,7 +241,7 @@ export function isTransientNetworkError(error) {
   if (["UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EAI_AGAIN"].includes(code)) {
     return true;
   }
-  // 业务错误（我们自己在 gitee() 里抛的）带 `HTTP xxx`，明确不算抖动
+  // 业务错误（我们自己在请求里抛的）带 `HTTP xxx`，明确不算抖动
   return /fetch failed/i.test(error.message ?? "") && !/HTTP \d/.test(error.message ?? "");
 }
 
@@ -268,102 +262,6 @@ async function withRetry(fn, { attempts = 4, onRetry, label = "请求" } = {}) {
   throw new Error(`${label}失败：${describeFetchError(lastError)}`);
 }
 
-async function gitee(path, { method = "GET", token, body, form, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
-  const url = new URL(`${GITEE_API}${path}`);
-  const headers = { "User-Agent": "ai-ledger-mirror" };
-  let payload;
-  if (form) {
-    payload = form;
-  } else {
-    const data = { ...(body ?? {}), access_token: token };
-    if (method === "GET") {
-      for (const [key, value] of Object.entries(data)) {
-        if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
-      }
-    } else {
-      headers["Content-Type"] = "application/json";
-      payload = JSON.stringify(data);
-    }
-  }
-  const response = await fetch(url, { method, headers, body: payload, signal: AbortSignal.timeout(timeoutMs) });
-  const text = await response.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    /* 非 JSON（出错时可能是 HTML） */
-  }
-  if (!response.ok) {
-    const detail = json?.error_description || json?.message || text.slice(0, 200) || response.statusText;
-    throw new Error(`Gitee ${method} ${path} 失败（HTTP ${response.status}）：${detail}`);
-  }
-  return json;
-}
-
-/**
- * 把本地清单作为 Release 附件推到 Gitee。
- *
- * 和 publish-gitee-release.mjs 里的做法一致：**先删同名旧附件再传**。
- * Gitee 附件允许重名，不删的话每次发布会多一份，列表越堆越长。
- * 但这次传的只有几百字节，删+传总共一两秒。
- *
- * 整段都包了退避重试：Gitee 偶发连接超时（实测撞到过
- * `UND_ERR_CONNECT_TIMEOUT`，同一时刻 curl 却是 200），而重传几百字节
- * 几乎没成本，重试几次比让 cron 报错划算得多。
- */
-async function pushManifestToGitee({ owner, repo, tag, token, manifestPath, releaseBody, branch, onRetry }) {
-  const retry = { onRetry, label: "推送清单到 Gitee" };
-
-  let releaseId = null;
-  try {
-    releaseId = await withRetry(async () => {
-      const release = await gitee(`/repos/${owner}/${repo}/releases/tags/${tag}`, { token });
-      return release?.id ?? null;
-    }, retry);
-  } catch {
-    /* 404 说明还没建过（或刚被读失败），下面走创建分支 */
-  }
-
-  if (!releaseId) {
-    const payload = { tag_name: tag, name: `${owner}/${repo} 最新版`, body: releaseBody };
-    if (branch) payload.target_commitish = branch;
-    const created = await withRetry(
-      () => gitee(`/repos/${owner}/${repo}/releases`, { method: "POST", token, body: payload }),
-      retry,
-    );
-    releaseId = created.id;
-    console.log(`[mirror] Gitee Release #${releaseId} 已创建`);
-  }
-
-  const name = basename(manifestPath);
-  const previousId = await withRetry(async () => {
-    const files = await gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, { token });
-    return (Array.isArray(files) ? files : []).find((f) => (f.name ?? f.title) === name)?.id ?? null;
-  }, retry);
-  if (previousId) {
-    await withRetry(
-      () => gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files/${previousId}`, { method: "DELETE", token }),
-      retry,
-    );
-    console.log(`[mirror] 已删除 Gitee 上的旧 ${name}`);
-  }
-
-  // 每次尝试都要**重新构造 FormData**：FormData / Blob 是一次性的，
-  // 把同一个实例重放给 fetch，某些实现下会直接失败（publish-gitee-release 踩过）。
-  const body = readFileSync(manifestPath);
-  await withRetry(() => {
-    const form = new FormData();
-    form.append("access_token", token);
-    form.append("file", new Blob([body]), name);
-    // 几百字节，30 秒超时绰绰有余
-    return gitee(`/repos/${owner}/${repo}/releases/${releaseId}/attach_files`, {
-      method: "POST",
-      form,
-      timeoutMs: REQUEST_TIMEOUT_MS,
-    });
-  }, retry);
-  console.log(`[mirror] 已推送 ${name} 到 Gitee（${statSync(manifestPath).size} 字节）`);
-}
 
 /* ==========================================================================
    自检
@@ -403,15 +301,14 @@ function selfTest() {
   const manifest = buildMirrorManifest({
     version: "0.1.1",
     notes: "修了个 bug",
-    publicBase: "http://104.208.75.62:9443/",
+    publicBase: "https://apk.xn--wnyy6w.tech/",
     assets: { arm64: { name: "app-arm64-release.apk" }, arm: { name: "app-arm-release.apk" } },
-    owner: "yykzz",
-    repo: "jizhang",
   });
-  check("清单 arm64 指向本机", manifest.apk.arm64, "http://104.208.75.62:9443/app-arm64-release.apk");
-  check("清单 arm 指向本机", manifest.apk.arm, "http://104.208.75.62:9443/app-arm-release.apk");
-  check("page_url 仍指 Gitee（国内可达）", manifest.page_url, "https://gitee.com/yykzz/jizhang/releases");
-  check("缺 ABI 时留空不报错", buildMirrorManifest({ version: "1", publicBase: "http://x", assets: {}, owner: "a", repo: "b" }).apk.arm, "");
+  check("清单 arm64 指向本机", manifest.apk.arm64, "https://apk.xn--wnyy6w.tech/app-arm64-release.apk");
+  check("清单 arm 指向本机", manifest.apk.arm, "https://apk.xn--wnyy6w.tech/app-arm-release.apk");
+  check("page_url 也指本机（不再引向 Gitee）", manifest.page_url, "https://apk.xn--wnyy6w.tech/");
+  check("清单里不该出现 gitee", JSON.stringify(manifest).includes("gitee"), false);
+  check("缺 ABI 时留空不报错", buildMirrorManifest({ version: "1", publicBase: "https://x", assets: {} }).apk.arm, "");
 
   check("仓库坐标解析", normalizeRepo("a-zou666/jizhang"), { owner: "a-zou666", repo: "jizhang" });
   check("仓库坐标带空格能容错", normalizeRepo("  a-zou666/jizhang "), { owner: "a-zou666", repo: "jizhang" });
@@ -440,12 +337,12 @@ function selfTest() {
   check("AbortSignal 超时要重试", isTransientNetworkError(Object.assign(new Error("x"), { name: "TimeoutError" })), true);
   check(
     "业务错误（HTTP 404）不重试",
-    isTransientNetworkError(new Error("Gitee GET /repos/a/b 失败（HTTP 404）：Not Found Project")),
+    isTransientNetworkError(new Error("GitHub /repos/a/b 失败（HTTP 404）：Not Found")),
     false,
   );
   check(
     "业务错误（HTTP 401 坏令牌）不重试",
-    isTransientNetworkError(new Error("Gitee POST /repos/a/b/releases 失败（HTTP 401）：token 无效")),
+    isTransientNetworkError(new Error("GitHub /repos/a/b 失败（HTTP 401）：Bad credentials")),
     false,
   );
   check("普通错误不重试", isTransientNetworkError(new Error("boom")), false);
@@ -485,10 +382,6 @@ async function main() {
   }
   const dryRun = argv.includes("--dry-run");
 
-  const owner = (process.env.GITEE_OWNER ?? "").trim() || DEFAULT_OWNER;
-  const repo = (process.env.GITEE_REPO ?? "").trim() || DEFAULT_REPO;
-  const tag = (process.env.GITEE_RELEASE_TAG ?? "").trim() || DEFAULT_TAG;
-  const token = (process.env.GITEE_TOKEN ?? "").trim();
   const ghRepoRaw = (process.env.GH_REPO ?? "").trim() || DEFAULT_GH_REPO;
   const publicBase = (process.env.PUBLIC_BASE ?? "").trim() || DEFAULT_PUBLIC_BASE;
   const apkDir = resolve((process.env.APK_DIR ?? "").trim() || DEFAULT_APK_DIR);
@@ -559,7 +452,7 @@ async function main() {
   }
 
   // 4) 生成清单
-  const manifest = buildMirrorManifest({ version, notes, publicBase, assets, owner, repo });
+  const manifest = buildMirrorManifest({ version, notes, publicBase, assets });
   if (dryRun) {
     console.log("[mirror] dry-run：清单内容如下：");
     console.log(JSON.stringify(manifest, null, 2));
@@ -576,38 +469,11 @@ async function main() {
   }
   console.log(`[mirror] 本地清单已写入 ${manifestPath}`);
 
-  // 5) 推清单到 Gitee
-  if (!token) {
-    console.log("[mirror] 未配置 GITEE_TOKEN，仅更新本机。需要在 /etc/ai-ledger-mirror.env 里配。");
-    return;
-  }
-  const branch = await (async () => {
-    try {
-      const info = await gitee(`/repos/${owner}/${repo}`, {});
-      return String(info?.default_branch ?? "").trim();
-    } catch {
-      return "";
-    }
-  })();
-  await pushManifestToGitee({
-    owner,
-    repo,
-    tag,
-    token,
-    manifestPath,
-    branch,
-    releaseBody:
-      `本 Release 由香港中转机（${publicBase}）自动维护，只承载更新清单 latest.json。\n` +
-      "\n" +
-      "APK 本体不在 Gitee —— 走中转机直链（快约 12 倍），地址见 latest.json 里的 apk.arm64 / apk.arm。\n" +
-      "\n" +
-      "App 内的「软件更新」读这个清单，不需要翻墙。",
-    onRetry: (attempt, reason, wait) => {
-      console.warn(`[mirror] Gitee 抖动（${reason}），第 ${attempt} 次重试，${wait}ms 后…`);
-    },
-  });
-
-  console.log(`[mirror] 完成：版本 ${version}，APK ${downloaded.length} 个，清单已上 Gitee`);
+  // 到这里就完事了 —— 清单和 APK 都在同一台机器上由 nginx 提供，
+  // 不需要再往任何第三方（Gitee）推东西。App 拉清单和下载 APK 走同一个域名。
+  console.log(`[mirror] 完成：版本 ${version}，APK ${downloaded.length} 个`);
+  console.log(`[mirror] 清单地址：${publicBase}/latest.json`);
+  for (const item of downloaded) console.log(`[mirror]   APK：${publicBase}/${item.name}`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {

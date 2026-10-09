@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
+import { domainToASCII, domainToUnicode } from "node:url";
 
 /* store.js 走 localStorage 持久化，node 里给个内存桩 */
 const store = new Map();
@@ -343,11 +344,27 @@ describe("软件更新（纯逻辑）", () => {
     assert.equal(mod.isNewerVersion("0.0.0-dev", "0.0.0-dev"), false);
   });
 
-  it("更新源常量指向 Gitee（不能退回 GitHub）", () => {
-    assert.match(mod.UPDATE_RELEASES_PAGE, /^https:\/\/gitee\.com\//);
-    assert.equal(mod.GITEE_OWNER, "yykzz");
-    assert.equal(mod.GITEE_REPO, "jizhang");
+  it("更新源常量指向自建服务器（不能退回 Gitee / GitHub）", () => {
+    // 必须走 HTTPS：Android 默认拦明文 HTTP，用 http:// 会被系统直接拒掉。
+    assert.match(mod.UPDATE_RELEASES_PAGE, /^https:\/\//);
+    // 域名用 punycode 形式（中文域名 `电脑.tech` 转写而来）。
+    // 断言「是 ASCII」是为了防止有人改回中文字面量 —— 部分运行时对 IDN 处理不一致。
+    assert.equal(mod.UPDATE_HOST, "apk.xn--wnyy6w.tech");
+    assert.ok(/^[\x20-\x7e]+$/.test(mod.UPDATE_HOST), "域名必须是 ASCII（punycode）");
+    assert.ok(mod.UPDATE_RELEASES_PAGE.includes(mod.UPDATE_HOST));
+    // 这两个都是被淘汰的第三方源，一个都不能回退
+    assert.ok(!mod.UPDATE_RELEASES_PAGE.includes("gitee.com"));
     assert.ok(!mod.UPDATE_RELEASES_PAGE.includes("github.com"));
+  });
+
+  it("更新源域名的 punycode 真的解回 `电脑.tech`（抄错立刻红）", () => {
+    // `xn--` 后面是一段 base36，肉眼根本分不出对错：
+    // `xn--nyqx68a` 看着也像模像样，实际解出来是 `徳健` —— 等于指向一个不存在的域名，
+    // 而且症状是「点了更新却检测不到新版本」，极难归因。这里用运行时交叉验证。
+    const decoded = domainToUnicode(mod.UPDATE_HOST);
+    assert.equal(decoded, "apk.电脑.tech", `punycode 解出来是 ${decoded}，不是 apk.电脑.tech`);
+    // 反向：把中文再编回去，必须和常量逐字相同
+    assert.equal(domainToASCII("apk.电脑.tech"), mod.UPDATE_HOST);
   });
 
   it("归一化检查结果：成功且有更新", () => {

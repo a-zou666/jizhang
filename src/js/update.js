@@ -1,4 +1,4 @@
-/** 十二、软件更新：检查 Gitee 上的新版本，并引导用户下载安装 */
+/** 十二、软件更新：检查自建分发服务器上的新版本，并引导用户下载安装 */
 
 import { checkUpdate } from "./bridge.js";
 import { icon } from "./icons.js";
@@ -52,7 +52,7 @@ function showChecking() {
     `<p class="modal-title">检查更新</p>
      <div class="update-state">
        <span class="update-spinner" aria-hidden="true"></span>
-       <p class="update-state__text">正在连接 Gitee 检查新版本…</p>
+       <p class="update-state__text">正在检查新版本…</p>
      </div>`,
     { dismissable: false },
   );
