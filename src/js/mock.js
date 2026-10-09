@@ -179,7 +179,8 @@ export async function mockImage(text, ledger = "") {
     items: [],
     ids: [],
     reply:
-      "这是浏览器预览环境，识图要打包成 App、并启用一个支持图片的模型（如 gpt-4o / claude-3-5-sonnet / glm-4v）才能用。",
+      "识图需要「打包后的 App + 一个支持图片输入的模型」。当前浏览器预览没有后端，所以发不出图片。" +
+      "在 App 里请到「对话」页顶部胶囊切到支持识图的模型（如 glm-4.6v-flash、doubao-seed-2-0-mini-260428、hy-vision-2.0-instruct）再发。",
   };
 }
 

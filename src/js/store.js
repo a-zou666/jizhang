@@ -790,19 +790,37 @@ export function addProviderModels(id, list) {
 }
 
 export function removeProviderModel(id, modelId) {
+  return removeProviderModels(id, [modelId]) > 0;
+}
+
+/**
+ * 批量移除模型（单删也是走这里）。
+ * 当前正在用的那个模型被删掉时，自动回退到剩下的第一个（没有就置空），
+ * 免得连接指向一个已经不存在的模型。
+ * @returns {number} 真正删掉的个数
+ */
+export function removeProviderModels(id, modelIds) {
   const provider = getProvider(id);
-  if (!provider) return false;
-  const models = provider.models.filter((item) => item.id !== modelId);
-  if (models.length === provider.models.length) return false;
+  if (!provider) return 0;
+  const doomed = new Set((modelIds ?? []).map((value) => String(value)));
+  const models = provider.models.filter((item) => !doomed.has(item.id));
+  const removed = provider.models.length - models.length;
+  if (!removed) return 0;
+
+  const fallback = models[0]?.id ?? "";
   const providers = state.settings.providers.map((item) => {
     if (item.id !== id) return item;
-    return { ...item, models, model: item.model === modelId ? models[0]?.id ?? "" : item.model };
+    return { ...item, models, model: doomed.has(item.model) ? fallback : item.model };
   });
   writeProviders(providers);
-  if (state.settings.activeProviderId === id && state.settings.model === modelId) {
-    patchConnection({ model: models[0]?.id ?? "" });
+  if (
+    state.settings.activeProviderId === id &&
+    state.settings.model &&
+    doomed.has(state.settings.model)
+  ) {
+    patchConnection({ model: fallback });
   }
-  return true;
+  return removed;
 }
 
 export function addCategory(name) {

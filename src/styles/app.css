@@ -1909,6 +1909,10 @@ a {
   border-color: rgba(var(--app-accent-rgb), 0.4);
 }
 
+.mm-row.is-muted {
+  opacity: 0.55;
+}
+
 .mm-row__main {
   flex: 1;
   min-width: 0;
@@ -1920,6 +1924,73 @@ a {
   background: none;
   border: 0;
   text-align: left;
+}
+
+/* 带复选框的行：复选框和文字横向排列 */
+.mm-row__main--tight {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* 勾选框：统一尺寸，别用系统默认大小 */
+.mm-check {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--app-accent-btn);
+  cursor: pointer;
+}
+
+/* 行的文字部分（标题 + 描述竖排） */
+.mm-row__text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 多选工具条：全选 / 删除选中 */
+.mm-bulk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.mm-bulk__spacer {
+  flex: 1;
+}
+
+.mm-bulk .chip:disabled,
+.mm-bulk .chip[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 删除类操作：平时不抢眼，hover / 可用时才是红的 */
+.chip--danger {
+  color: var(--color-danger);
+  background: var(--color-danger-light);
+}
+
+.chip--danger:disabled {
+  color: var(--text-tertiary);
+  background: var(--surface-hover);
+}
+
+/* 拉取选择框：搜索框 + 可滚动的候选列表 */
+.mm-fetch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.mm-list--tall {
+  max-height: 46vh;
 }
 
 .mm-row__main:active {

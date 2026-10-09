@@ -24,7 +24,7 @@
 - **iOS 毛玻璃**：真正的 backdrop-blur 磨砂面板，彩色渐变底衬
 - **明细管理**：左滑删除、长按编辑、数据本地存储（不上云）
 - **识图记账**：对话页可以直接发小票 / 账单 / 支付截图，视觉模型自己读出每一笔（需支持图片的模型）
-- **模型管理**：内置智谱 GLM / 豆包（火山方舟）/ 腾讯混元 / DeepSeek / 通义千问等预设，点一下填好地址并预置模型；地址可填基址也可粘完整 URL，切换启用完全手动
+- **模型管理**：内置智谱 GLM / 豆包（火山方舟）/ 腾讯混元 / DeepSeek / 通义千问等预设，点一下填好地址；**从 API 拉取会先弹出选择框**，可以搜索模型 ID 再勾选要用的（不会再一次性全拉进来，里面一堆不能用的模型）；已拉取的模型支持**多选批量删除**，删完留在原地可以接着删
 - **数据导出 / 导入**：JSON / CSV 导出，导入时可选「合并」或「覆盖恢复」；备份里的 API Key 一律脱敏，导入不会覆盖本机真实凭据
 
 ## 界面截图
@@ -33,19 +33,19 @@
 
 | 首页 · 日历记账 | 对话页 · AI 记账 | 账单页 · 环形图区间统计 |
 | --- | --- | --- |
-| ![首页](docs/screenshots/home.png?v=2) | ![对话页](docs/screenshots/chat.png?v=2) | ![账单页](docs/screenshots/bills.png?v=2) |
+| ![首页](docs/screenshots/home.png?v=3) | ![对话页](docs/screenshots/chat.png?v=3) | ![账单页](docs/screenshots/bills.png?v=3) |
 
-| 账单页 · 按分类筛选 | 设置页 | 模型管理 | 服务商的模型列表 |
-| --- | --- | --- | --- |
-| ![分类筛选](docs/screenshots/bills-filter.png?v=2) | ![设置页](docs/screenshots/settings.png?v=2) | ![模型管理](docs/screenshots/model-manager.png?v=2) | ![模型列表](docs/screenshots/model-list.png?v=2) |
-
-| 对话里的账目卡片 | 识图记账（发小票） | 记一笔 |
+| 账单页 · 按分类筛选 | 设置页 | 模型管理 |
 | --- | --- | --- |
-| ![账目卡片](docs/screenshots/chat-card.png?v=2) | ![识图记账](docs/screenshots/chat-image.png?v=2) | ![记一笔](docs/screenshots/quick-add.png?v=2) |
+| ![分类筛选](docs/screenshots/bills-filter.png?v=3) | ![设置页](docs/screenshots/settings.png?v=3) | ![模型管理](docs/screenshots/model-manager.png?v=3) |
 
-| 编辑 / 删除 |
-| --- |
-| ![编辑记录](docs/screenshots/edit-record.png?v=2) |
+| 已拉取的模型（多选删除） | 从 API 拉取（搜索 + 勾选） | 识图记账（发小票） |
+| --- | --- | --- |
+| ![模型列表](docs/screenshots/model-list.png?v=3) | ![拉取选择框](docs/screenshots/model-fetch.png?v=3) | ![识图记账](docs/screenshots/chat-image.png?v=3) |
+
+| 对话里的账目卡片 | 记一笔 | 编辑 / 删除 |
+| --- | --- | --- |
+| ![账目卡片](docs/screenshots/chat-card.png?v=3) | ![记一笔](docs/screenshots/quick-add.png?v=3) | ![编辑记录](docs/screenshots/edit-record.png?v=3) |
 
 ## 下载
 
@@ -56,8 +56,9 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 设置页 → **模型管理**：
 
 1. **添加服务商**：可以直接点预设（智谱 GLM / 豆包 / 混元 / DeepSeek / 通义千问…），也可以手填：名称 + 协议 + 接口地址 + API Key
-2. **拉取 / 添加模型**：点服务商右侧「设置」，手动填模型 ID，或「从 API 拉取」—— 拉到的模型全部进入可选池，不做筛选
-3. **选当前用哪个模型**：在「对话」页顶部胶囊点开，列出所有已拉取的模型，点一个即切换（地址 / Key 跟着切到它所属的服务商）
+2. **从 API 拉取**：点服务商右侧「设置」→「从 API 拉取」，会先弹出**选择框**：顶部搜索模型 ID，勾选要用的再点「添加选中」。已经在池里的会标灰，不会重复加
+3. **管理已拉取的模型**：每行左侧有勾选框，可以**多选后一次删掉**；顶部的「全选」按当前结果全选。单删之后仍留在弹窗里，不用每次重新进设置
+4. **选当前用哪个模型**：在「对话」页顶部胶囊点开，列出所有已拉取的模型，点一个即切换（地址 / Key 跟着切到它所属的服务商）
 
 服务商与模型都只保存在本机，全部由你手动增删改——不会自动建档、也不会自动切换。
 
@@ -88,6 +89,7 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 视觉模型会自己读出每一笔，回来还是同一张「确认入账 / 忽略」卡片。
 
 - 需要启用一个**支持图片输入**的模型（如 `glm-4.6v-flash`、`doubao-seed-2-0-mini-260428`、`hy-vision-2.0-instruct`）；
+  用纯文本模型（如 `doubao-seed-evolving`、`deepseek-chat`）发图会被服务端拒掉，App 会提示你换模型并附上服务端原文；
 - 图片在本机压缩（最长边 1280）后再送模型，聊天记录里只留小缩略图（单条最多 12 张、最近 30 条带图消息保留），原图不入库；
 - 清空对话会把这些缩略图一起清掉。
 

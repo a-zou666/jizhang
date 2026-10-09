@@ -141,7 +141,21 @@ export function promptText({ title, value = "", placeholder = "", inputMode = "t
 }
 
 /* ---------------- 二次确认 ---------------- */
-export function confirmDialog({ title, message, confirmLabel = "确定", danger = false, onConfirm }) {
+/**
+ * @param {{ title: string, message?: string, confirmLabel?: string, danger?: boolean,
+ *           onConfirm?: Function, onClose?: Function }} config
+ *        onClose：确认框关闭（确认或取消都算）后回调。
+ *        确认框复用的是同一个弹窗容器，会把下面那层弹窗覆盖掉，
+ *        所以调用方可以用 onClose 把原来的弹窗按原样重开。
+ */
+export function confirmDialog({
+  title,
+  message,
+  confirmLabel = "确定",
+  danger = false,
+  onConfirm,
+  onClose,
+}) {
   openModal(
     `<p class="modal-title">${escapeHtml(title)}</p>
      ${message ? `<p class="t-footnote" style="text-align:center;color:var(--text-secondary);margin-bottom:var(--space-4)">${escapeHtml(message)}</p>` : ""}
@@ -151,10 +165,11 @@ export function confirmDialog({ title, message, confirmLabel = "确定", danger 
          ${danger ? 'style="background:var(--color-danger)"' : ""}>${escapeHtml(confirmLabel)}</button>
      </div>`,
     {
+      onClose: onClose ?? undefined,
       onMount: (panel) => {
         panel.querySelector("#modalConfirm").addEventListener("click", () => {
           closeModal();
-          onConfirm();
+          onConfirm?.();
         });
         panel.querySelector("#modalCancel").addEventListener("click", closeModal);
       },

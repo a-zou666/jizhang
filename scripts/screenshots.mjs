@@ -245,6 +245,22 @@ async function main() {
     ([key, value]) => window.localStorage.setItem(key, value),
     ["ai-ledger/v1", JSON.stringify(seed)],
   );
+  // 预置一份「上次成功拉取的模型列表」缓存：预览环境没有真后端，
+  // listModels 会回退到这份缓存 —— 这样「从 API 拉取」的选择框在截图里也能演示。
+  await context.addInitScript(
+    ([key, value]) => window.localStorage.setItem(key, value),
+    [
+      "ai-ledger/models-cache",
+      JSON.stringify({
+        "openai-compatible@https://api.deepseek.com": [
+          "deepseek-chat",
+          "deepseek-reasoner",
+          "deepseek-vl2",
+          "deepseek-coder",
+        ],
+      }),
+    ],
+  );
 
   const page = await context.newPage();
   page.on("pageerror", (error) => console.warn("  ! 页面报错：", error.message));
@@ -322,6 +338,34 @@ async function main() {
     await actions[0].click();
     await page.waitForTimeout(500);
     await shoot(page, "model-list", ".mm-row", 2);
+
+    /* 从 API 拉取：弹出的选择框（搜索 + 勾选，不再一次性全拉进来）
+       预览环境没有真后端，拉不到线上模型；这里直接把「拉回来的候选」喂给
+       同一个入口 openFetchPickerWith，截出来的就是真实的那个选择框。 */
+    const fetched = await page.evaluate(async () => {
+      const mod = await import("/js/models.js");
+      const store = await import("/js/store.js");
+      const providerId = store.getProviders()[0]?.id;
+      if (!providerId || typeof mod.openFetchPickerWith !== "function") return false;
+      mod.openFetchPickerWith(
+        providerId,
+        ["deepseek-chat", "deepseek-reasoner", "deepseek-vl2", "deepseek-coder", "deepseek-r1"],
+        () => {},
+      );
+      return true;
+    });
+    if (fetched) {
+      await page.waitForTimeout(400);
+      await page.fill("#fpSearch", "deepseek");
+      await page.waitForTimeout(300);
+      const fpBoxes = await page.$$("#fpList .mm-check:not([disabled])");
+      for (const box of fpBoxes.slice(0, 2)) await box.check().catch(() => {});
+      await page.waitForTimeout(300);
+      await shoot(page, "model-fetch", "#fpList .mm-row", 1);
+      await page.click("#fpCancel").catch(() => {});
+      await page.waitForTimeout(400);
+    }
+
     await page.click("#pvCancel").catch(() => {}); // 先关服务商编辑（嵌套弹窗）
     await page.waitForTimeout(400);
   }

@@ -82,6 +82,28 @@ function describeIntentError(error) {
   );
 }
 
+/**
+ * 把「识图失败」翻译成一句能直接照着做的话。
+ * 最常见的失败是：当前模型是纯文本模型（如 doubao-seed-evolving、deepseek-chat），
+ * 服务端会直接拒掉带图的请求 —— 这种情况光报 HTTP 错误用户看不懂，得告诉他换模型。
+ * 其余情况保留服务端原文，方便排查（Key 错、地址错、额度用完等）。
+ */
+function describeImageError(error, model) {
+  const raw = String(error?.message ?? error ?? "");
+  const name = String(model ?? "").trim() || "当前模型";
+  const looksUnsupported =
+    /image|vision|multimodal|content.*type|unsupported|invalid.*content|不支持/i.test(raw) ||
+    /\b400\b/.test(raw);
+  if (looksUnsupported) {
+    return new Error(
+      `模型「${name}」不支持识图。去「对话」页顶部胶囊换一个支持图片的模型` +
+        `（如 glm-4.6v-flash、doubao-seed-2-0-mini-260428、hy-vision-2.0-instruct）再发。\n` +
+        `服务端原文：${raw}`,
+    );
+  }
+  return describeIntentError(error);
+}
+
 export async function parseIntent(text, settings, ledger) {
   if (!hasBackend()) return mockIntent(text, ledger);
 
@@ -132,7 +154,8 @@ export async function parseImage(text, images, settings, ledger) {
   try {
     result = await withTimeout(call(), AI_TIMEOUT_MS);
   } catch (error) {
-    throw describeIntentError(error);
+    // 识图失败最常见的原因是「当前模型不支持图片」，单独给一句能照着做的提示
+    throw describeImageError(error, settings.model);
   }
 
   return normalizeIntent(result);

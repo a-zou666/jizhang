@@ -1114,7 +1114,7 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.replaceAll({ records: [], settings: {} });
 }
 
-/* --- 从 API 拉取：拉到的模型全部进池，不弹「勾选加入」的限制弹窗 --- */
+/* --- 从 API 拉取：先弹选择框（可搜索），勾选后才入池 --- */
 {
   const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
   const models = await import(new URL("../src/js/models.js", import.meta.url));
@@ -1131,7 +1131,9 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   // 在测试里把 Tauri 的 invoke 临时 stub 成返回一批假模型，模拟「正常拉取」
   const prevTauri = globalThis.__TAURI__;
   globalThis.__TAURI__ = {
-    core: { invoke: async () => ({ ok: true, models: ["pull-a", "pull-b", "pull-c"] }) },
+    core: {
+      invoke: async () => ({ ok: true, models: ["glm-4-flash", "glm-4-plus", "deepseek-chat", "already-1"] }),
+    },
   };
   try {
     await models.fetchModelsInto(provider.id, () => {});
@@ -1140,13 +1142,136 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     globalThis.__TAURI__ = prevTauri;
   }
 
-  const ids = store.getProvider(provider.id).models.map((item) => item.id);
-  const allIn = ["already-1", "pull-a", "pull-b", "pull-c"].every((id) => ids.includes(id));
-  if (!allIn) {
-    fail("从 API 拉取没把全部模型加进池子", JSON.stringify(ids));
-  } else if (panel.querySelector("#mmPickList")) {
-    fail("从 API 拉取不该再弹「勾选加入」弹窗（那是限制，不是正常拉取）", "");
-  } else ok("从 API 拉取：拉到的模型全部进池（含已有），不再弹勾选限制弹窗");
+  // 拉取本身不写库：只弹选择框
+  const beforeIds = store.getProvider(provider.id).models.map((item) => item.id);
+  if (beforeIds.join("/") !== "already-1") {
+    fail("拉取后不该直接入池（应先弹选择框由用户挑）", JSON.stringify(beforeIds));
+  } else ok("拉取只取回候选列表，不直接写进模型池");
+
+  const search = panel.querySelector("#fpSearch");
+  const fpList = panel.querySelector("#fpList");
+  if (!search || !fpList) {
+    fail("拉取后没有弹出带搜索框的选择框");
+  } else ok("拉取后弹出选择框，顶部带搜索框");
+
+  const rowCount = fpList.querySelectorAll(".mm-row").length;
+  if (rowCount !== 4) {
+    fail("候选列表行数不对（应列出拉到的 4 个）", `实际 ${rowCount}`);
+  } else ok("候选列表列出全部 4 个拉到的模型");
+
+  // 已在池中的那个应当置灰且勾选不上
+  const muted = fpList.querySelectorAll(".mm-row").filter((n) => n.classList.contains("is-muted"));
+  if (muted.length !== 1) {
+    fail("已在池中的模型应被标灰（应 1 个）", `实际 ${muted.length}`);
+  } else ok("已在池中的模型标灰并注明「已在池中」，不会重复添加");
+
+  // 搜索：只留 glm
+  search.value = "glm";
+  search.dispatch("input");
+  await settle();
+  const filtered = fpList.querySelectorAll(".mm-row").length;
+  if (filtered !== 2) {
+    fail("搜索 glm 后候选行数不对（应 2 个）", `实际 ${filtered}`);
+  } else ok("搜索框按关键词过滤候选（glm → 2 个）");
+
+  // 全选当前筛选结果，再确认添加
+  panel.querySelector("#fpSelectAll").__listeners.get("click")[0]();
+  await settle();
+  const confirmBtn = panel.querySelector("#fpConfirm");
+  if (!/添加选中 \(2\)/.test(String(confirmBtn.textContent ?? ""))) {
+    fail("全选后确认按钮没显示选中数量", String(confirmBtn.textContent ?? ""));
+  } else ok("全选按钮只选中当前筛选结果，确认按钮显示「添加选中 (2)」");
+
+  confirmBtn.__listeners.get("click")[0]();
+  await settle();
+  const afterIds = store.getProvider(provider.id).models.map((item) => item.id);
+  if (afterIds.join("/") !== "already-1/glm-4-flash/glm-4-plus") {
+    fail("确认后入池的模型不对", JSON.stringify(afterIds));
+  } else ok("确认后只把勾选的 2 个加进池，没被勾的 deepseek-chat 不入池");
+
+  store.replaceAll({ records: [], settings: {} });
+}
+
+/* --- 模型管理：单删不退出弹窗 + 批量删除 --- */
+{
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const models = await import(new URL("../src/js/models.js", import.meta.url));
+  const panel = documentStub.getElementById("modalPanel");
+  store.replaceAll({ records: [], settings: {} });
+
+  const provider = store.addProvider({
+    name: "删除测试",
+    baseUrl: "https://del.test",
+    apiKey: "sk-del",
+    models: ["m-1", "m-2", "m-3"],
+  });
+  store.selectModel(provider.id, "m-2");
+
+  models.openModelManager();
+  await settle();
+  // 进二级：编辑这家服务商
+  // 注意：smoke 的 DOM 桩不支持后代选择器，一律拆成「先取容器再取子元素」
+  const clickFirst = (container, selector) => {
+    const host = container
+      ? documentStub.getElementById("modalPanel").querySelector(container)
+      : documentStub.getElementById("modalPanel");
+    const node = host?.querySelectorAll(selector)[0];
+    if (!node) throw new Error(`找不到可点击的 ${container ?? "panel"} ${selector}`);
+    node.__listeners.get("click")[0]();
+  };
+  const rowCount = () =>
+    documentStub.getElementById("modalPanel").querySelector("#pvModelList")?.querySelectorAll(".mm-row")
+      .length ?? -1;
+
+  clickFirst("#mmProviders", ".mm-row__action");
+  await settle();
+  if (rowCount() !== 3) {
+    fail("编辑弹窗里模型列表行数不对（应 3 个）", `实际 ${rowCount()}`);
+  } else ok("编辑弹窗列出该服务商的 3 个模型");
+
+  // 单删：确认后要回到编辑弹窗（而不是退到模型管理），才能接着删下一个
+  clickFirst("#pvModelList", ".mm-row__action");
+  await settle();
+  if (!documentStub.getElementById("modalPanel").querySelector("#modalConfirm")) {
+    fail("单删没有弹出确认框");
+  }
+  clickFirst(null, "#modalConfirm");
+  await settle();
+  const left = rowCount();
+  const stillEditor = !!documentStub.getElementById("modalPanel").querySelector("#pvModelList");
+  if (left !== 2) fail("单删后模型数不对（应剩 2 个）", `实际 ${left}`);
+  else if (!stillEditor) fail("单删后没回到编辑弹窗（应该留在原地，方便连续删）");
+  else ok("单删模型后回到编辑弹窗，可以接着删下一个");
+
+  // 批量：勾两个 → 顶部出现「删除选中 (2)」→ 确认后一次删掉
+  const boxes = documentStub.getElementById("modalPanel")
+    .querySelector("#pvModelList")
+    .querySelectorAll(".mm-check");
+  boxes.forEach((box) => {
+    box.checked = true;
+    box.dispatch("change");
+  });
+  await settle();
+  const bulkText = String(
+    documentStub.getElementById("modalPanel").querySelector("#pvBulkDelete").textContent ?? "",
+  );
+  if (!/删除选中 \(2\)/.test(bulkText)) {
+    fail("勾选后批量删除按钮没显示数量", bulkText);
+  } else ok("勾选 2 个模型后，顶部出现「删除选中 (2)」");
+
+  clickFirst(null, "#pvBulkDelete");
+  await settle();
+  clickFirst(null, "#modalConfirm");
+  await settle();
+  const rest = store.getProvider(provider.id).models.map((item) => item.id);
+  if (rest.length !== 0) {
+    fail("批量删除后模型没删干净", JSON.stringify(rest));
+  } else ok("批量删除一次清掉选中的模型");
+
+  // 正在用的模型被删掉时，当前连接要回退到剩下的第一个（这里全删了 → 置空）
+  if (store.getSettings().model) {
+    fail("批量删完当前模型后，连接里的模型没回退", store.getSettings().model);
+  } else ok("批量删掉正在用的模型后，当前连接回退（避免指向不存在的模型）");
 
   store.replaceAll({ records: [], settings: {} });
 }
