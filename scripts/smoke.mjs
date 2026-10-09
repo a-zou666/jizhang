@@ -1231,6 +1231,51 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("明细行没带上「分类 · 日期 时间」", metaText);
   } else ok(`明细行带分类与记账时间：「${metaText}」`);
 
+  // 明细按分类筛选：筛选条 = 全部 + 区间内出现过的分类
+  const filterChips = documentStub.getElementById("billsFilter").querySelectorAll(".chip");
+  if (filterChips.length !== 4) {
+    fail("明细的分类筛选条不对（应为「全部」+ 3 个分类）", `实际 ${filterChips.length}`);
+  } else ok(`明细可按分类筛选：${[...filterChips].map((n) => n.textContent).join(" / ")}`);
+
+  // 分类按金额降序：娱乐 / 餐饮 / 交通，所以「餐饮」是 chips[2]
+  filterChips[2].__listeners.get("click")[0]();
+  await settle();
+  const filteredRows = documentStub.getElementById("billsList").querySelectorAll(".bills-record");
+  if (filteredRows.length !== 1) {
+    fail("按分类筛选后明细行数不对（只看餐饮应剩 1 笔）", `实际 ${filteredRows.length}`);
+  } else ok("点「餐饮」后明细只剩该分类的 1 笔");
+
+  const filteredCount = String(documentStub.getElementById("billsListCount").textContent ?? "");
+  if (filteredCount !== "1 / 3 笔") {
+    fail("筛选时明细计数不对（应显示「1 / 3 笔」）", filteredCount);
+  } else ok("筛选时明细计数显示「1 / 3 笔」（筛出 / 区间总共）");
+
+  // 桩不支持 `.a.b` 这种复合选择器，先取弧段再按 is-dim 过滤
+  const allArcs = documentStub.getElementById("billsDonut").querySelectorAll(".bills-donut__arc");
+  const dimArcs = allArcs.filter((node) => node.classList.contains("is-dim"));
+  if (dimArcs.length !== 2) {
+    fail("筛选时环形图没压暗其它分类（应压暗 2 段）", `实际 ${dimArcs.length}`);
+  } else ok("筛选时环形图压暗其它分类的弧段，选中项一眼可辨");
+
+  // 再点一次已选中的分类：取消筛选，回到全部
+  documentStub.getElementById("billsFilter").querySelectorAll(".chip")[2].__listeners.get("click")[0]();
+  await settle();
+  const restoredRows = documentStub.getElementById("billsList").querySelectorAll(".bills-record");
+  if (restoredRows.length !== 3) {
+    fail("再点一次已选中的分类没有取消筛选", `实际 ${restoredRows.length}`);
+  } else ok("再点一次已选中的分类：取消筛选，明细回到 3 笔");
+
+  // 换区间后原来选的分类在新区间里没有 → 自动退回「全部」
+  documentStub.getElementById("billsFilter").querySelectorAll(".chip")[2].__listeners.get("click")[0]();
+  await settle();
+  startInput.value = `${thisMonth}-03`;
+  startInput.dispatch("change");
+  await settle();
+  const chipsAfter = documentStub.getElementById("billsFilter").querySelectorAll(".chip");
+  if (!chipsAfter[0].classList.contains("is-selected")) {
+    fail("换区间后选中的分类已不存在，却没退回「全部」");
+  } else ok("换区间后选中的分类不存在：自动退回「全部」，不会筛出空列表");
+
   // 改开始日期：区间变了要立刻重算
   startInput.value = `${thisMonth}-03`;
   startInput.dispatch("change");

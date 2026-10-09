@@ -2139,7 +2139,13 @@ a {
 .bills-donut__arc {
   fill: none;
   stroke-width: 13;
-  transition: stroke-dasharray var(--duration-medium) var(--ease-out);
+  transition: stroke-dasharray var(--duration-medium) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+/* 明细按分类筛选时，没被选中的弧段压暗（选中态由筛选条 / 分类榜决定） */
+.bills-donut__arc.is-dim {
+  opacity: 0.22;
 }
 
 /* 圆心放区间合计：宽度限制在内圈里，位数多了由 JS 加 is-long 降一档字号 */
@@ -2218,7 +2224,8 @@ a {
   color: var(--text-primary);
 }
 
-/* ---------- 分类榜：占比由环形图承担，这里只列数字 ---------- */
+/* ---------- 分类榜：占比由环形图承担，这里只列数字 ----------
+   整行可点：点一下只看这个分类，再点一下回到全部 */
 .bills-cats {
   display: flex;
   flex-direction: column;
@@ -2232,7 +2239,29 @@ a {
   grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: var(--space-2);
+  width: 100%;
   padding: var(--space-1) 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.bills-cat:hover {
+  background: var(--surface-hover);
+}
+
+.bills-cat.is-active {
+  background: var(--app-accent-soft);
+}
+
+.bills-cat.is-active .bills-cat__name {
+  font-weight: var(--font-semibold);
+  color: var(--app-accent-ink);
 }
 
 .bills-cat__dot {
@@ -2264,6 +2293,12 @@ a {
 }
 
 /* ---------- 逐条明细：按日期分组，组内是一张张小卡片 ---------- */
+
+/* 分类筛选条：跟上面的分组列表之间留出一段，别挤在一起 */
+.bills-filter {
+  margin-bottom: var(--space-3);
+}
+
 .bills-records {
   display: flex;
   flex-direction: column;

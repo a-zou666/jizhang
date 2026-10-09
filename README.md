@@ -20,7 +20,7 @@
 
 - **对话式记账**：独立的「对话」页，像豆包 / 元宝那样聊天；AI 识别后在对话里给出账目卡片，点「确认入账」落账
 - **日历记账**：月支出概览与预算进度、每日金额小字、左右滑动或按钮翻月（可看历史）
-- **账单统计**：底部「账单」页按日期区间查账（默认本月开头 → 今天，开始 / 结束都能改，另有本月 / 上月 / 近 7 天 / 近 30 天 / 全部快捷区间）；**环形图**展示各分类占比、圆心是区间合计，旁边给出笔数 / 日均 / 最大单笔三个指标，下方明细按日期分组（每天一个当天小计），每行列出分类 · 时间 · 金额
+- **账单统计**：底部「账单」页按日期区间查账（默认本月开头 → 今天，开始 / 结束都能改，另有本月 / 上月 / 近 7 天 / 近 30 天 / 全部快捷区间）；**环形图**展示各分类占比、圆心是区间合计，旁边给出笔数 / 日均 / 最大单笔三个指标；**消费明细可按分类筛选**（点「全部 / 餐饮 / 交通…」筛选条，或直接点分类榜那一行，环形图会同步压暗其它分类，再点一次取消），明细按日期分组并带当天小计，每行列出分类 · 时间 · 金额
 - **iOS 毛玻璃**：真正的 backdrop-blur 磨砂面板，彩色渐变底衬
 - **明细管理**：左滑删除、长按编辑、数据本地存储（不上云）
 - **识图记账**：对话页可以直接发小票 / 账单 / 支付截图，视觉模型自己读出每一笔（需支持图片的模型）
@@ -33,19 +33,19 @@
 
 | 首页 · 日历记账 | 对话页 · AI 记账 | 账单页 · 环形图区间统计 |
 | --- | --- | --- |
-| ![首页](docs/screenshots/home.png) | ![对话页](docs/screenshots/chat.png) | ![账单页](docs/screenshots/bills.png) |
+| ![首页](docs/screenshots/home.png?v=2) | ![对话页](docs/screenshots/chat.png?v=2) | ![账单页](docs/screenshots/bills.png?v=2) |
 
-| 设置页 | 模型管理 | 服务商的模型列表 |
-| --- | --- | --- |
-| ![设置页](docs/screenshots/settings.png) | ![模型管理](docs/screenshots/model-manager.png) | ![模型列表](docs/screenshots/model-list.png) |
+| 账单页 · 按分类筛选 | 设置页 | 模型管理 | 服务商的模型列表 |
+| --- | --- | --- | --- |
+| ![分类筛选](docs/screenshots/bills-filter.png?v=2) | ![设置页](docs/screenshots/settings.png?v=2) | ![模型管理](docs/screenshots/model-manager.png?v=2) | ![模型列表](docs/screenshots/model-list.png?v=2) |
 
 | 对话里的账目卡片 | 识图记账（发小票） | 记一笔 |
 | --- | --- | --- |
-| ![账目卡片](docs/screenshots/chat-card.png) | ![识图记账](docs/screenshots/chat-image.png) | ![记一笔](docs/screenshots/quick-add.png) |
+| ![账目卡片](docs/screenshots/chat-card.png?v=2) | ![识图记账](docs/screenshots/chat-image.png?v=2) | ![记一笔](docs/screenshots/quick-add.png?v=2) |
 
 | 编辑 / 删除 |
 | --- |
-| ![编辑记录](docs/screenshots/edit-record.png) |
+| ![编辑记录](docs/screenshots/edit-record.png?v=2) |
 
 ## 下载
 

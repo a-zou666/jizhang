@@ -251,12 +251,13 @@
               <div class="bills-cats" id="billsCats"></div>
             </section>
 
-            <!-- 逐条明细：按日期分组，每行给出分类 · 时间 · 金额 -->
+            <!-- 逐条明细：先按分类筛（默认全部），再按日期分组，每行给出分类 · 时间 · 金额 -->
             <section class="panel bills-records-panel glass-sheen soft-glass">
               <header class="panel__head">
                 <h2 class="panel__title bills-section-title">消费明细</h2>
                 <span class="panel__count t-footnote" id="billsListCount"></span>
               </header>
+              <div class="chip-row bills-filter" id="billsFilter"></div>
               <div class="bills-records" id="billsList"></div>
             </section>
           </div>

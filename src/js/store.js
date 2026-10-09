@@ -587,6 +587,12 @@ export function groupRecordsByDate(records) {
   }));
 }
 
+/** 只留下某个分类的账目；分类为空 / 不传表示不筛（原样返回） */
+export function filterByCategory(records, category) {
+  if (!category) return [...(records ?? [])];
+  return (records ?? []).filter((record) => record.category === category);
+}
+
 /* ---------------- 写入 ---------------- */
 export function addRecords(list) {
   const added = list.map(sanitizeRecord).filter(Boolean);

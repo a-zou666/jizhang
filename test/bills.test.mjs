@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 // 统计函数放在数据层 store.js（不依赖 DOM），账单页只是消费它们
 import {
   daysBetween,
+  filterByCategory,
   groupRecordsByDate,
   recordsInRange,
   sumByCategory,
@@ -95,4 +96,22 @@ test("明细分组：按日期聚合并算出当天小计，顺序沿用传入�
 test("明细分组：空输入返回空数组", () => {
   assert.deepEqual(groupRecordsByDate([]), []);
   assert.deepEqual(groupRecordsByDate(undefined), []);
+});
+
+test("分类筛选：空分类表示不筛，原样返回（且是新数组）", () => {
+  const all = recordsInRange(sample, "2026-10-01", "2026-10-09");
+  const result = filterByCategory(all, "");
+  assert.deepEqual(result, all);
+  assert.notEqual(result, all, "不筛也要返回副本，别让调用方改到原数组");
+});
+
+test("分类筛选：只留下指定分类的账目，保持原有顺序", () => {
+  const all = recordsInRange(sample, "2026-10-01", "2026-10-09");
+  assert.deepEqual(filterByCategory(all, "餐饮").map((r) => r.id), ["c", "a"]);
+  assert.deepEqual(filterByCategory(all, "娱乐").map((r) => r.id), []);
+});
+
+test("分类筛选：空输入 / undefined 不报错", () => {
+  assert.deepEqual(filterByCategory([], "餐饮"), []);
+  assert.deepEqual(filterByCategory(undefined, "餐饮"), []);
 });

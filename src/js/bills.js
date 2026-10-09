@@ -7,14 +7,15 @@
  * 页面结构（自上而下三块）：
  *   ① 日期区间：开始 / 结束 + 快捷区间
  *   ② 区间概览：环形图（各分类占比，圆心是区间合计）+ 三个关键指标 + 分类金额榜
- *   ③ 消费明细：按日期分组，每行给出分类 · 时间 · 金额
- * 统计用的纯函数（recordsInRange / sumByCategory / daysBetween / groupRecordsByDate）
- * 都放在 store.js 的数据层，不依赖 DOM，能直接在 node:test 里单测。
+ *   ③ 消费明细：可按分类筛选（默认全部），再按日期分组，每行给出分类 · 时间 · 金额
+ * 统计用的纯函数（recordsInRange / sumByCategory / daysBetween / groupRecordsByDate /
+ * filterByCategory）都放在 store.js 的数据层，不依赖 DOM，能直接在 node:test 里单测。
  */
 
 import {
   categoryColor,
   daysBetween,
+  filterByCategory,
   getRecords,
   groupRecordsByDate,
   recordsInRange,
@@ -36,6 +37,9 @@ import {
 
 /** 当前区间（YYYY-MM-DD；空串表示不限）。默认本月开头 → 今天 */
 let range = defaultRange();
+
+/** 消费明细的分类筛选：空串 = 全部；只影响明细，区间概览始终是整个区间的账 */
+let categoryFilter = "";
 
 function defaultRange() {
   return { start: dateKey(startOfMonth(today())), end: dateKey(today()) };
@@ -97,11 +101,20 @@ export function renderBills() {
 
   renderPresets();
   renderStats(records, total);
-  // 分类汇总一次，环形图和下面的分类榜共用同一份数据
+
+  // 分类汇总一次，环形图、分类榜、筛选条共用同一份数据
   const cats = sumByCategory(records);
+  // 换了区间后，如果之前选的分类在新区间里根本没有，就退回「全部」
+  if (categoryFilter && !cats.some((item) => item.category === categoryFilter)) {
+    categoryFilter = "";
+  }
+
   renderDonut(cats);
   renderCategories(cats);
-  renderRecords(records);
+  renderFilter(cats, records);
+
+  const shown = filterByCategory(records, categoryFilter);
+  renderRecords(shown, records.length);
 }
 
 /** 区间跨了多少天：用于「日均」。全区间（不限）时按有账目的天数算 */
@@ -206,8 +219,10 @@ function renderDonut(cats) {
       const span = (item.percent / 100) * DONUT_C;
       // 扣掉缝隙，但至少留一点长度，免得占比极小的分类整段消失
       const length = Math.max(span - DONUT_GAP, 0.8);
+      // 明细按分类筛选时，把没被选中的弧段压暗，跟下面的筛选条呼应
+      const dim = categoryFilter && categoryFilter !== item.category ? " is-dim" : "";
       const arc =
-        `<circle class="bills-donut__arc" cx="50" cy="50" r="${DONUT_R}" ` +
+        `<circle class="bills-donut__arc${dim}" cx="50" cy="50" r="${DONUT_R}" ` +
         `stroke-dasharray="${length.toFixed(2)} ${(DONUT_C - length).toFixed(2)}" ` +
         `stroke-dashoffset="${(-offset).toFixed(2)}" ` +
         `style="stroke:${categoryColor(item.category)}" />`;
@@ -258,29 +273,91 @@ function renderCategories(cats) {
   box.replaceChildren(
     ...cats.map((item) => {
       const color = categoryColor(item.category);
-      return el("div", { class: "bills-cat" }, [
-        el("span", {
-          class: "bills-cat__dot",
-          "aria-hidden": "true",
-          style: `background:${color}`,
-        }),
-        el("span", { class: "bills-cat__name", text: item.category }),
-        el("span", { class: "bills-cat__percent t-numeric", text: `${item.percent.toFixed(1)}%` }),
-        el("span", { class: "bills-cat__amount t-numeric", text: yuan(item.amount) }),
-      ]);
+      const active = categoryFilter === item.category;
+      // 整个分类行也是一个筛选入口：点一下只看这个分类，再点一下回到全部
+      const row = el(
+        "button",
+        {
+          class: `bills-cat${active ? " is-active" : ""}`,
+          type: "button",
+          "aria-pressed": active ? "true" : "false",
+          title: active ? "取消筛选，看全部" : `只看「${item.category}」`,
+        },
+        [
+          el("span", {
+            class: "bills-cat__dot",
+            "aria-hidden": "true",
+            style: `background:${color}`,
+          }),
+          el("span", { class: "bills-cat__name", text: item.category }),
+          el("span", { class: "bills-cat__percent t-numeric", text: `${item.percent.toFixed(1)}%` }),
+          el("span", { class: "bills-cat__amount t-numeric", text: yuan(item.amount) }),
+        ],
+      );
+      row.addEventListener("click", () => {
+        categoryFilter = active ? "" : item.category;
+        renderBills();
+      });
+      return row;
+    }),
+  );
+}
+
+/* ---------------- 明细的分类筛选条 ----------------
+ * 「全部」+ 区间内出现过的分类；点已选中的分类就退回全部。
+ */
+function renderFilter(cats, records) {
+  const row = $("#billsFilter");
+  if (!row) return;
+
+  const countOf = (category) =>
+    records.reduce((sum, record) => sum + (record.category === category ? 1 : 0), 0);
+
+  const chips = [
+    { key: "", label: "全部", count: records.length },
+    ...cats.map((item) => ({ key: item.category, label: item.category, count: countOf(item.category) })),
+  ];
+
+  row.replaceChildren(
+    ...chips.map((chip) => {
+      const active = categoryFilter === chip.key;
+      const node = el("button", {
+        class: `chip${active ? " is-selected" : ""}`,
+        type: "button",
+        "aria-pressed": active ? "true" : "false",
+        text: `${chip.label} ${chip.count}`,
+      });
+      node.addEventListener("click", () => {
+        // 再点一次已选中的就取消筛选，回到「全部」
+        categoryFilter = active ? "" : chip.key;
+        renderBills();
+      });
+      return node;
     }),
   );
 }
 
 /* ---------------- 逐条明细（按日期分组） ---------------- */
-function renderRecords(records) {
+function renderRecords(records, totalCount = records.length) {
   const list = $("#billsList");
   const countLabel = $("#billsListCount");
   if (!list) return;
 
-  if (countLabel) countLabel.textContent = records.length ? `${records.length} 笔` : "";
+  // 筛选中显示「筛出来的 / 区间总共」，不筛选时只显示总笔数
+  if (countLabel) {
+    countLabel.textContent = categoryFilter
+      ? `${records.length} / ${totalCount} 笔`
+      : totalCount
+        ? `${totalCount} 笔`
+        : "";
+  }
   if (!records.length) {
-    list.replaceChildren(el("p", { class: "bills-empty", text: "这个区间还没有账目" }));
+    list.replaceChildren(
+      el("p", {
+        class: "bills-empty",
+        text: categoryFilter ? `这个区间没有「${categoryFilter}」的账目` : "这个区间还没有账目",
+      }),
+    );
     return;
   }
 

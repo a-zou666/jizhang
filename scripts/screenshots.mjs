@@ -288,10 +288,24 @@ async function main() {
   await page.waitForTimeout(500);
   await shoot(page, "settings", "#rowModels", 1);
 
-  /* 账单页：日期区间 + 区间合计 + 分类构成 + 逐条明细 */
+  /* 账单页：日期区间 + 环形图区间概览 + 逐条明细 */
   await page.click('.tabbar__item[data-tab="bills"]');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(600);
   await shoot(page, "bills", ".bills-cat", 2);
+
+  /* 账单页 · 按分类筛选：点一个分类，明细只剩这一类 */
+  await page.locator("#billsFilter").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(400);
+  const filterChips = await page.$$("#billsFilter .chip");
+  if (filterChips[1]) {
+    await filterChips[1].click();
+    await page.waitForTimeout(500);
+    await shoot(page, "bills-filter", ".bills-record", 1);
+    // 取消筛选，回到全部（后面的截图不依赖它，但保持界面干净）
+    const resetChips = await page.$$("#billsFilter .chip");
+    if (resetChips[0]) await resetChips[0].click();
+    await page.waitForTimeout(300);
+  }
 
   /* 回到设置页 → 模型管理 */
   await page.click('.tabbar__item[data-tab="settings"]');
