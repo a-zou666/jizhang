@@ -337,38 +337,37 @@ pub async fn fetch_manifest(url: &str) -> Result<UpdateManifest, String> {
 /// 都会长成这样）。此前只透出最外层，导致「连不上」这种没法排查的提示 ——
 /// 现在把整条 source 链拼出来。
 fn describe_request_error(url: &str, error: &reqwest::Error) -> String {
-    let mut detail = error.to_string();
-    let mut source: Option<&(dyn std::error::Error + 'static)> = error.source();
-    while let Some(inner) = source {
+    // 逐层往下取 source，**先收集成 String 再拼** —— 直接把 &dyn Error 串起来会
+    // 撞生命周期（每层的引用寿命绑在上一层上，`while let` 收不住）。
+    let mut parts = vec![error.to_string()];
+    // 完全限定写 `std::error::Error`：这个模块顶部没有 `use std::error::Error`
+    // （引进来容易和 serde 的 trait 命名打架），这里也就一处用到。
+    let mut current: &(dyn std::error::Error + 'static) = error;
+    while let Some(inner) = current.source() {
         let text = inner.to_string();
-        if !detail.contains(&text) {
-            detail.push_str(" ← ");
-            detail.push_str(&text);
+        if !parts.iter().any(|p| p == &text) {
+            parts.push(text);
         }
-        source = inner.source();
+        current = inner;
     }
+    let detail = parts.join(" ← ");
 
     // 按最常见的几种原因给出下一步，别让用户对着英文报错发呆。
-    let hint = if detail.contains("Certificate") || detail.contains("certificate") || detail.contains("UnknownIssuer") {
-        "证书校验失败。若浏览器能打开该地址，多半是客户端的根证书列表没跟上，把 App 升级到最新版再试。"
-    } else if detail.contains("dns") || detail.contains("Name or service not known") || detail.contains("failed to lookup") {
+    let lower = detail.to_lowercase();
+    let hint = if lower.contains("certificate") || lower.contains("unknownissuer") {
+        "证书校验失败。若浏览器能打开该地址，多是客户端的根证书列表没跟上 —— 升级到最新版 App 再试。"
+    } else if lower.contains("dns") || lower.contains("name or service") || lower.contains("lookup") {
         "域名解析失败，检查手机网络（换 WiFi / 关掉代理或 VPN 再试）。"
-    } else if detail.contains("timed out") || detail.contains("timeout") {
-        "连接超时，可能是当前网络屏蔽了该端口，换网络再试。"
+    } else if lower.contains("timed out") || lower.contains("timeout") {
+        "连接超时，可能是当前网络屏蔽了该端口，换个网络再试。"
     } else {
-        "可以先到发布页手动下载：{}"
+        return format!(
+            "连不上更新服务器：{}\n错误详情：{}\n可以先到发布页手动下载：{}",
+            url, detail, RELEASES_PAGE
+        );
     };
 
-    if hint.contains("{}") {
-        format!(
-            "连不上更新服务器：{}（{}）\n{}",
-            url,
-            detail,
-            hint.replace("{}", RELEASES_PAGE)
-        )
-    } else {
-        format!("连不上更新服务器：{}（{}）\n{}", url, detail, hint)
-    }
+    format!("连不上更新服务器：{}\n错误详情：{}\n{}", url, detail, hint)
 }
 
 #[cfg(test)]
