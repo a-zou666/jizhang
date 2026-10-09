@@ -33,10 +33,9 @@ use serde_json::Value;
    更新源常量
    ========================================================================== */
 
-/// Gitee 仓库坐标。**全项目更新源的唯一真相**，换仓库只改这里两行
-/// （`MANIFEST_URL` / `DOWNLOAD_PREFIX` 等下面的地址常量是它的展开，
-/// 但因为 Rust 的 const 不能拼接字符串，所以那些地址仍是字面量 —— 改仓库时
-/// 记得同步改；两端一致性由 `scripts/publish-gitee-release.mjs` 的默认值兜底）。
+/// Gitee 仓库坐标。清单（`latest.json`）就挂在这个仓库的 Release 附件里，
+/// 换仓库只改这里两行（下面的地址常量是它的展开，Rust 的 const 不能拼接
+/// 字符串，所以那些地址仍是字面量 —— 改仓库时记得同步改）。
 pub const GITEE_OWNER: &str = "yykzz";
 pub const GITEE_REPO: &str = "jizhang";
 
@@ -46,14 +45,28 @@ pub const GITEE_REPO: &str = "jizhang";
 /// 列表接口返回数组、附件地址还要再拼一次，而且每个 tag 名字可能不同；
 /// 固定附件名让 App 端永远只认一个 URL。仓库公开时该地址匿名可下。
 ///
-/// tag 用固定的 `latest`（CI 每次发布都更新同一个 Release），这样清单地址
-/// 永远不变；APK 附件也挂在同一个 Release 下，直链同样是固定格式。
+/// **清单留在 Gitee 是刻意的**：这个文件只有几百字节，Gitee 秒传，而国内
+/// 直连 Gitee 又快又稳。它只负责「告诉 App 有新版本、去哪儿下」。
+///
+/// tag 用固定的 `latest`（发布流程每次更新同一个 Release），这样清单地址
+/// 永远不变，App 端不用跟着版本号改代码。
 pub const MANIFEST_URL: &str = "https://gitee.com/yykzz/jizhang/releases/download/latest/latest.json";
 
-/// Release 附件直链前缀。清单里若没给出完整地址，就用它 + 文件名拼。
-pub const DOWNLOAD_PREFIX: &str = "https://gitee.com/yykzz/jizhang/releases/download/latest";
+/// APK 直链前缀（**香港中转机**，不是 Gitee）。
+///
+/// 为什么 APK 不放在 Gitee：实测 Gitee 的附件**上传**接口只有 10~50 KB/s
+/// （同一台机器传 GitHub 有 876 KB/s，从 Gitee **下载**也有 463 KB/s），
+/// 一个 8MB 的包要传好几分钟还常超时。慢的是 Gitee 的附件服务本身，不是跨境。
+///
+/// 所以改成：CI 只把 APK 传 GitHub Release（快）→ 香港机器定时拉取并挂到
+/// 自己的 nginx（上行 43MB/s）→ 只把几百字节的 `latest.json` 推给 Gitee。
+/// 详见仓库 `scripts/mirror-apk-to-hk.mjs` 与 README「更新链路」。
+///
+/// 正常情况下清单里的 `apk.arm64` / `apk.arm` 已经是**完整地址**，用不到这个
+/// 前缀；它只在清单缺地址时的兜底路径上生效。
+pub const DOWNLOAD_PREFIX: &str = "http://104.208.75.62:9443";
 
-/// 发布页（找不到具体附件时兜底）
+/// 发布页（找不到具体附件时兜底）。仍指向 Gitee —— 国内可达。
 pub const RELEASES_PAGE: &str = "https://gitee.com/yykzz/jizhang/releases";
 
 /// 发布页地址。由仓库坐标拼出来 —— 这样 `GITEE_OWNER` / `GITEE_REPO`
@@ -314,10 +327,40 @@ mod tests {
             "https://gitee.com/{}/{}",
             GITEE_OWNER, GITEE_REPO
         )));
-        assert!(DOWNLOAD_PREFIX.starts_with(&format!(
-            "https://gitee.com/{}/{}",
-            GITEE_OWNER, GITEE_REPO
-        )));
+    }
+
+    #[test]
+    fn download_prefix_points_to_hk_mirror() {
+        // APK 本体走香港中转机（Gitee 附件上传只有 10~50KB/s，放不住大文件）。
+        // 这里刻意断言**不是** Gitee —— 如果有人「顺手改回去」，必须让测试红，
+        // 否则又会退回到「一个包传好几分钟」的老路。
+        assert!(
+            !DOWNLOAD_PREFIX.contains("gitee.com"),
+            "APK 直链前缀不该再指 Gitee：{DOWNLOAD_PREFIX}"
+        );
+        assert!(
+            DOWNLOAD_PREFIX.starts_with("http://") || DOWNLOAD_PREFIX.starts_with("https://"),
+            "直链前缀必须是完整地址：{DOWNLOAD_PREFIX}"
+        );
+        // 清单地址仍留在 Gitee（几百字节，秒传，国内可达）
+        assert!(MANIFEST_URL.contains("gitee.com"));
+    }
+
+    #[test]
+    fn resolve_download_keeps_absolute_url() {
+        // 中转机清单里给的是完整 URL，拼接前缀不能把它改坏
+        assert_eq!(
+            resolve_download("http://104.208.75.62:9443", "http://104.208.75.62:9443/app-arm64-release.apk"),
+            "http://104.208.75.62:9443/app-arm64-release.apk"
+        );
+        assert_eq!(
+            resolve_download("http://x", "https://a.example/b.apk"),
+            "https://a.example/b.apk"
+        );
+        // 相对文件名才拼前缀
+        assert_eq!(resolve_download("http://x/", "/app.apk"), "http://x/app.apk");
+        assert_eq!(resolve_download("http://x", "app.apk"), "http://x/app.apk");
+        assert_eq!(resolve_download("http://x", "  "), "");
     }
 
     #[test]

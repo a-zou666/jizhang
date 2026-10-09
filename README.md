@@ -62,22 +62,77 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 首次安装需在系统设置里允许「安装未知来源应用」。升级安装必须用同一个签名的包，否则会提示「应用未安装」，
 需要先卸载旧版本 —— 这会清掉本机账目，**升级前建议先在设置里导出备份**。
 
-### App 内更新（走 Gitee，不需要翻墙）
+### App 内更新（走香港中转机，不需要翻墙）
 
-设置页 → **软件更新**：App 会去 Gitee 读版本清单，有新版就弹出「版本号 + 更新说明」，点**立即下载**用系统浏览器
-打开 APK 直链，浏览器自动开始下载，下完点一下即可安装。
-
-更新源固定在 Gitee 的 [yykzz/jizhang](https://gitee.com/yykzz/jizhang)：
+设置页 → **软件更新**：App 会去 Gitee 读一份几百字节的版本清单，有新版就弹出「版本号 + 更新说明」，点**立即下载**
+用系统浏览器打开 APK 直链，浏览器自动开始下载，下完点一下即可安装。
 
 | 用途 | 地址 |
 | --- | --- |
-| 版本清单 | `https://gitee.com/yykzz/jizhang/releases/download/latest/latest.json` |
-| APK 直链 | `https://gitee.com/yykzz/jizhang/releases/download/latest/app-arm64-release.apk` |
+| 版本清单（Gitee，几百字节） | `https://gitee.com/yykzz/jizhang/releases/download/latest/latest.json` |
+| APK 直链（香港中转机） | `http://104.208.75.62:9443/app-arm64-release.apk` |
 | 发布页（手动兜底） | https://gitee.com/yykzz/jizhang/releases |
 
-用固定的 `latest` tag 承载「当前最新版」，每次发布**覆盖同一 Release 的附件**，所以 App 里的清单地址和 APK 直链
-永远不变。CI 在打完包、签完名之后会自动跑 `scripts/publish-gitee-release.mjs`：创建 / 复用 `latest` Release
-→ 上传签名 APK 和 `latest.json`（需要仓库 Secrets 里的 `GITEE_TOKEN`，没有就跳过，不影响 GitHub 这边的发布）。
+#### 为什么要中转（实测数据）
+
+一开始 APK 本体也放在 Gitee，但上传慢得没法用。在香港 Azure 机器上实测（2026-10-09）：
+
+| 方向 | 速度 |
+| --- | --- |
+| 香港 → GitHub 下载 7MB | **5 MB/s** |
+| 香港 → GitHub 上传 2MB | **876 KB/s** |
+| 香港 → Gitee **上传** 2MB | **30~50 KB/s** |
+| 香港 → Gitee 下载（Release 直链） | 463 KB/s |
+| GitHub Actions → Gitee 上传 8MB | **约 4~8 分钟** |
+| Gitee TCP connect / TLS 握手 | 0.46s / 0.72s（链路本身没问题） |
+
+**结论：慢的不是跨境，是 Gitee 自己的附件上传接口。** 所以「换台国内机器推 Gitee」只能快 2~3 倍，
+治不了本；而「用 Gitee 仓库 raw 存 APK」更是反模式（二进制进 git 历史永久膨胀、还同样要上传）。
+
+真正有效的做法是**让 Gitee 不必承载 APK 本体**：
+
+```
+GitHub Actions ──(5MB/s)──> GitHub Release（只存构建产物，CI 只做这一步）
+                                  │ 香港机器每 5 分钟拉取（下行 174MB/s）
+                                  ▼
+                        104.208.75.62:/var/www/apk + nginx :9443（上行 43MB/s）
+                                  │ 只把 319 字节的 latest.json 推到 Gitee
+                                  ▼
+                            Gitee Release（秒传）
+                                  │
+                                  ▼
+                      App 拉清单 → APK 从香港直链下载（实测 5.5MB/s，比 Gitee 快约 12 倍）
+```
+
+这样推给 Gitee 的数据量从 ~12MB 降到 **319 字节**，CI 再也不会卡在上传上。
+
+#### 中转机怎么运作
+
+中转机（`104.208.75.62`，Ubuntu 22.04 香港 Azure）上：
+
+| 部件 | 位置 |
+| --- | --- |
+| 同步脚本 | `/home/azhou/apk-sync/mirror-apk-to-hk.mjs`（源码在仓库 `scripts/`） |
+| 执行封装（cron 调它） | `/home/azhou/apk-sync/mirror-run.sh` |
+| 定时任务 | `*/5 * * * *` 每 5 分钟一次 |
+| 站点根目录 | `/var/www/apk`（APK + latest.json） |
+| nginx 配置 | `/etc/nginx/sites-enabled/apk-mirror`（独立 server 块，**只监听 9443**） |
+| 密钥/配置 | `/etc/ai-ledger-mirror.env`（`chmod 600`，里面有 `GITEE_TOKEN`） |
+| 运行日志 | `/home/azhou/apk-sync/mirror.log`（自动保留最近 500 行） |
+
+脚本做的事：读 GitHub 最新 Release → 按 ABI 下 APK（先写 `.part` 再 `rename`，保证用户不会下到半截文件）
+→ 版本没变就跳过（幂等）→ 生成清单（APK 地址指向本机，`page_url` 仍指 Gitee）→ 只把清单推到 Gitee。
+
+> **注意**：这台机器上还跑着别的东西（Caddy 占 80/8443，nginx 占 443/8888 做团队路由反代，
+> docker 跑 New API）。所以 `apk-mirror` 必须是**独立 server 块**、用**独立端口 9443**，
+> 千万不要去改现有配置。
+
+手动触发一次同步：
+
+```bash
+ssh azhou@104.208.75.62 '/home/azhou/apk-sync/mirror-run.sh'
+ssh azhou@104.208.75.62 'tail -20 /home/azhou/apk-sync/mirror.log'
+```
 
 > 为什么不在 App 内直接下载并静默安装：Android 7+ 安装 APK 必须走 FileProvider 生成 `content://` URI 再发
 > `ACTION_VIEW` Intent，而 Tauri 2 的 Rust 侧拿不到 Activity / JNIEnv，官方也没有对应插件；强行 JNI 调用容易

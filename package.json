@@ -1,7 +1,7 @@
 {
   "name": "ai-ledger",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
@@ -9,7 +9,7 @@
     "build": "vite build",
     "screenshots": "node scripts/screenshots.mjs",
     "preview": "node scripts/preview.mjs",
-    "check": "node --check src/js/app.js && node --check src/js/bills.js && node --check src/js/bridge.js && node --check src/js/calendar.js && node --check src/js/chat.js && node --check src/js/confirm.js && node --check src/js/detail.js && node --check src/js/editor.js && node --check src/js/gesture.js && node --check src/js/home.js && node --check src/js/icons.js && node --check src/js/image.js && node --check scripts/screenshots.mjs && node --check src/js/mock.js && node --check src/js/models.js && node --check src/js/preview.js && node --check src/js/quickadd.js && node --check src/js/settings.js && node --check src/js/store.js && node --check src/js/ui.js && node --check src/js/update.js && node --check src/js/util.js && node --check src/js/view.js && node --check scripts/preview.mjs && node --check scripts/inject-android-permissions.mjs && node --check scripts/publish-gitee-release.mjs && node scripts/inject-android-permissions.mjs --self-test && node scripts/inject-safe-area.mjs --self-test && node scripts/check-rust-calls.mjs --self-test && node scripts/check-rust-calls.mjs && node scripts/sign-android-apk.mjs --self-test && node scripts/publish-gitee-release.mjs --self-test && node scripts/smoke.mjs && node --test",
+    "check": "node --check src/js/app.js && node --check src/js/bills.js && node --check src/js/bridge.js && node --check src/js/calendar.js && node --check src/js/chat.js && node --check src/js/confirm.js && node --check src/js/detail.js && node --check src/js/editor.js && node --check src/js/gesture.js && node --check src/js/home.js && node --check src/js/icons.js && node --check src/js/image.js && node --check scripts/screenshots.mjs && node --check src/js/mock.js && node --check src/js/models.js && node --check src/js/preview.js && node --check src/js/quickadd.js && node --check src/js/settings.js && node --check src/js/store.js && node --check src/js/ui.js && node --check src/js/update.js && node --check src/js/util.js && node --check src/js/view.js && node --check scripts/mirror-apk-to-hk.mjs && node --check scripts/preview.mjs && node --check scripts/inject-android-permissions.mjs && node --check scripts/publish-gitee-release.mjs && node scripts/inject-android-permissions.mjs --self-test && node scripts/inject-safe-area.mjs --self-test && node scripts/check-rust-calls.mjs --self-test && node scripts/check-rust-calls.mjs && node scripts/sign-android-apk.mjs --self-test && node scripts/publish-gitee-release.mjs --self-test && node scripts/mirror-apk-to-hk.mjs --self-test && node scripts/smoke.mjs && node --test",
     "smoke": "node scripts/smoke.mjs",
     "test": "node --test"
   },

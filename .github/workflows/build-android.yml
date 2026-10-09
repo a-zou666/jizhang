@@ -90,20 +90,17 @@ jobs:
           path: src-tauri/gen/android/app/build/outputs/apk/**/*-release.apk
           if-no-files-found: error
 
-      # 更新链路必须走 Gitee：GitHub 国内经常连不上，走 GitHub 等于「永远更新不了」。
-      # 这里把已签名的 APK 与 latest.json 推到 Gitee 的固定 tag（默认 latest），
-      # App 端只认 Gitee 的固定地址，不用跟着版本号改代码。
-      # 没配 GITEE_TOKEN 时脚本会跳过（CI 不红），只是这次不推 Gitee。
-      - name: Publish APK + manifest to Gitee Release
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
-          GITEE_REPO: ${{ secrets.GITEE_REPO }}
-          RELEASE_NOTES: |
-            Android v${{ steps.pkg.outputs.version }}（构建 #${{ github.run_number }}）
-            仓库：${{ github.repository }}
-        run: node scripts/publish-gitee-release.mjs
-
+      # 只把已签名的 APK 传到 GitHub Release（这里快，8MB 二十秒左右）。
+      #
+      # **不要再往 Gitee 传 APK 本体**：实测 Gitee 附件上传接口只有 10~50 KB/s
+      # （香港传 30~50KB/s，Actions 传 10~24KB/s，而同一台机器传 GitHub 有 876KB/s），
+      # 一个包要传 2~8 分钟，还经常超时重试。慢的是 Gitee 的附件服务，不是跨境。
+      #
+      # 分发链路改成「香港中转机」：香港机器定时跑 scripts/mirror-apk-to-hk.mjs，
+      # 从本 Release 下载 APK 挂到自己的 nginx（:9443，上行 43MB/s），
+      # 只把几百字节的 latest.json 推到 Gitee。App 端清单地址不变，
+      # 但清单里的 APK 直链指向中转机。
+      # 详见 README「更新链路」一节。
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -115,8 +112,8 @@ jobs:
             - 现代手机（arm64）选 `app-arm64-release.apk`
             - 老设备（armeabi-v7a）选 `app-arm-release.apk`
 
-            > App 内的「软件更新」从 Gitee 拉取，**不需要翻墙**。
-            > 本页只是镜像，仅在没有 Gitee 环境时作备用。
+            > 本页是构建产物源，香港中转机会自动拉取并同步给 App 内的「软件更新」。
+            > 直接在这里下载也可以，只是国内可能要翻墙。
 
             首次安装需在系统设置里允许「安装未知来源应用」。升级安装必须用同一签名的包，
             否则会提示「应用未安装」，需先卸载旧版本（会清掉本地账目，建议先导出备份）。
