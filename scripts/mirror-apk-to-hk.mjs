@@ -32,7 +32,8 @@
  * ## 环境变量
  *
  *   GH_REPO      可选，默认 a-zou666/jizhang（GitHub 仓库坐标）
- *   PUBLIC_BASE  可选，默认 https://apk.xn--wnyy6w.tech（对外地址前缀）
+ *   PUBLIC_BASE  可选，默认 https://apk.xn--wnyy6w.tech（清单/APK 的地址前缀，App 用）
+ *   PAGE_BASE    可选，默认同 PUBLIC_BASE（下载页地址前缀，浏览器用，通常是 :9444）
  *   APK_DIR      可选，默认 /var/www/apk
  *   FORCE        设 1 时即使版本没变也重新同步
  *   GH_TOKEN     可选，GitHub API 令牌（提一下速率限制，匿名也够用）
@@ -132,8 +133,13 @@ export function pickLatestRelease(releases) {
 }
 
 /** 生成 App 端要读的清单。APK 地址与 page_url 都指向本机域名 */
-export function buildMirrorManifest({ version, notes, publicBase, assets }) {
+export function buildMirrorManifest({ version, notes, publicBase, pageBase, assets }) {
   const base = String(publicBase ?? "").replace(/\/+$/, "");
+  // 落地页地址**可以**与清单/APK 不同域（含端口）——
+  // 清单与 APK 走 :9443（自签证书，App 内置了对应根 CA），
+  // 而落地页是给**浏览器**看的，自签会被浏览器拦（「不安全」警告），
+  // 所以指向 :9444（Let's Encrypt）。不传就退回 base，保持向后兼容。
+  const page = String(pageBase ?? "").trim().replace(/\/+$/, "") || base;
   const url = (abi) => {
     const asset = assets?.[abi];
     return asset ? `${base}/${asset.name}` : "";
@@ -148,9 +154,74 @@ export function buildMirrorManifest({ version, notes, publicBase, assets }) {
       universal: "",
     },
     // 发布页也指本机：Gitee 整条链路已弃用，兜底不该再把人引过去
-    page_url: `${base}/`,
+    page_url: `${page}/`,
     published_at: new Date().toISOString(),
   };
+}
+
+/**
+ * 生成下载落地页（`/var/www/apk/index.html`）。
+ *
+ * 两个设计点：
+ *
+ * 1. **由脚本生成，不手写。** 曾经手写了一份、版本号写死在 HTML 里，
+ *    结果每次发新版页面都停在旧号上（APK 其实是新的，只有那行文字骗人），
+ *    白排查了一轮「为什么网站还是旧版本」。
+ *
+ * 2. **版本号仍然由页面自己实时 fetch `latest.json`**，不在这里注入。
+ *    这样即使这个函数很久没跑（比如只换了 APK），页面显示的也永远是真的。
+ *    脚本生成 + 前端实时读，双保险。
+ */
+export function buildLandingPage() {
+  return `<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI 记账 · 下载</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         font: 15px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+         background:#f5f5f7; color:#1d1d1f; }
+  .card { width:min(420px,88vw); padding:28px 24px; background:#fff; border-radius:16px;
+          box-shadow:0 4px 24px rgba(0,0,0,.06); }
+  h1 { margin:0 0 4px; font-size:20px; }
+  .ver { color:#6e6e73; font-size:13px; margin-bottom:20px; min-height:20px; }
+  a { display:block; padding:14px 16px; margin-bottom:10px; border-radius:12px; text-decoration:none;
+      background:#0071e3; color:#fff; font-weight:600; text-align:center; }
+  a.alt { background:#e8e8ed; color:#1d1d1f; }
+  .tip { margin-top:16px; font-size:12px; color:#6e6e73; line-height:1.7; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#000; color:#f5f5f7; }
+    .card { background:#1c1c1e; box-shadow:none; }
+    a.alt { background:#2c2c2e; color:#f5f5f7; }
+  }
+</style>
+<div class="card">
+  <h1>AI 记账</h1>
+  <div class="ver" id="ver">正在读取版本…</div>
+  <a href="app-arm64-release.apk">下载（现代手机 · arm64）</a>
+  <a class="alt" href="app-arm-release.apk">下载（老设备 · armeabi-v7a）</a>
+  <div class="tip">
+    首次安装需允许「安装未知来源应用」。<br>
+    升级安装必须同一签名，否则提示「应用未安装」，需先卸载（会清掉本机账目，建议先导出备份）。
+  </div>
+</div>
+<script>
+  // 版本号实时从 latest.json 读，不写死在页面里（写死会停在旧号上）。
+  fetch('latest.json', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (m) {
+      var when = m.published_at ? new Date(m.published_at) : null;
+      var text = '最新版本 ' + m.version;
+      if (when && !isNaN(when)) text += ' · ' + when.toLocaleDateString('zh-CN');
+      document.getElementById('ver').textContent = text;
+    })
+    .catch(function () {
+      document.getElementById('ver').textContent = '版本信息读取失败，可直接下载';
+    });
+</script>
+`;
 }
 
 /** sha256（用于判断「GitHub 上的包和本地是不是同一个」） */
@@ -310,6 +381,20 @@ function selfTest() {
   check("清单里不该出现 gitee", JSON.stringify(manifest).includes("gitee"), false);
   check("缺 ABI 时留空不报错", buildMirrorManifest({ version: "1", publicBase: "https://x", assets: {} }).apk.arm, "");
 
+  // page_url 可以指向**另一个端口**（浏览器用 Let's Encrypt，App 用自签）——
+  // 这条最容易被以后的人漏掉：把 pageBase 忘了传，浏览器一打开就是证书警告。
+  const dual = buildMirrorManifest({
+    version: "0.1.1",
+    publicBase: "https://apk.xn--wnyy6w.tech:9443",
+    pageBase: "https://apk.xn--wnyy6w.tech:9444",
+    assets: { arm64: { name: "app-arm64-release.apk" } },
+  });
+  check("APK 直链走 App 端口（9443 自签）", dual.apk.arm64, "https://apk.xn--wnyy6w.tech:9443/app-arm64-release.apk");
+  check("page_url 走浏览器端口（9444 LE）", dual.page_url, "https://apk.xn--wnyy6w.tech:9444/");
+  check("不给 pageBase 时退回 publicBase", buildMirrorManifest({ version: "1", publicBase: "https://a.b:1", assets: {} }).page_url, "https://a.b:1/");
+  check("pageBase 末尾斜杠会被规整", buildMirrorManifest({ version: "1", publicBase: "https://a", pageBase: "https://b/", assets: {} }).page_url, "https://b/");
+  check("pageBase 是空白串时退回 publicBase", buildMirrorManifest({ version: "1", publicBase: "https://a", pageBase: "   ", assets: {} }).page_url, "https://a/");
+
   check("仓库坐标解析", normalizeRepo("a-zou666/jizhang"), { owner: "a-zou666", repo: "jizhang" });
   check("仓库坐标带空格能容错", normalizeRepo("  a-zou666/jizhang "), { owner: "a-zou666", repo: "jizhang" });
   check("非法坐标返回 null", normalizeRepo("jizhang"), null);
@@ -346,6 +431,15 @@ function selfTest() {
     false,
   );
   check("普通错误不重试", isTransientNetworkError(new Error("boom")), false);
+
+  // 落地页：必须是脚本生成的，且版本号**不能**写死在里面
+  // （写死过一次，发新版后页面还停在旧号上，很容易误判成「没同步」）
+  const landing = buildLandingPage();
+  check("落地页有 arm64 下载链接", landing.includes('href="app-arm64-release.apk"'), true);
+  check("落地页有 arm 下载链接", landing.includes('href="app-arm-release.apk"'), true);
+  check("落地页实时读 latest.json", landing.includes("fetch('latest.json'"), true);
+  check("落地页版本号没有写死", /\d+\.\d+\.\d+/.test(landing), false);
+  check("落地页是完整 HTML", landing.trimStart().startsWith("<!doctype html>"), true);
 
   let failed = 0;
   for (const item of cases) {
@@ -384,6 +478,10 @@ async function main() {
 
   const ghRepoRaw = (process.env.GH_REPO ?? "").trim() || DEFAULT_GH_REPO;
   const publicBase = (process.env.PUBLIC_BASE ?? "").trim() || DEFAULT_PUBLIC_BASE;
+  // 落地页（浏览器用）的地址前缀。默认与 publicBase 同源，但真实部署时
+  // 两者是**不同端口**：清单/APK 走 :9443 自签（App 内置根 CA），
+  // 落地页走 :9444 Let's Encrypt（浏览器不认自签）。不设就退回 publicBase。
+  const pageBase = (process.env.PAGE_BASE ?? "").trim() || publicBase;
   const apkDir = resolve((process.env.APK_DIR ?? "").trim() || DEFAULT_APK_DIR);
   const force = (process.env.FORCE ?? "").trim() === "1";
   const ghToken = (process.env.GH_TOKEN ?? "").trim();
@@ -398,6 +496,7 @@ async function main() {
   console.log(`[mirror] 来源 GitHub：${ghRepo.owner}/${ghRepo.repo}`);
   console.log(`[mirror] 落地目录：${apkDir}`);
   console.log(`[mirror] 直链前缀：${publicBase}`);
+  console.log(`[mirror] 下载页前缀：${pageBase}`);
 
   // 1) 找 GitHub 上最新的 Release
   const releases = await githubJson(`/repos/${ghRepo.owner}/${ghRepo.repo}/releases?per_page=10`, {
@@ -452,7 +551,7 @@ async function main() {
   }
 
   // 4) 生成清单
-  const manifest = buildMirrorManifest({ version, notes, publicBase, assets });
+  const manifest = buildMirrorManifest({ version, notes, publicBase, pageBase, assets });
   if (dryRun) {
     console.log("[mirror] dry-run：清单内容如下：");
     console.log(JSON.stringify(manifest, null, 2));
@@ -468,6 +567,23 @@ async function main() {
     /* 非关键 */
   }
   console.log(`[mirror] 本地清单已写入 ${manifestPath}`);
+
+  // 5) 顺手生成下载落地页
+  //
+  // 这页是 App「打开下载页」的兜底落点，也方便手动装机。**必须由脚本生成**：
+  // 之前图省事手写了一个、版本号写死在 HTML 里，结果每次发新版页面都停在旧号上
+  // （实际下载的 APK 是新的，只有那行字骗人），白排查一轮。
+  // 现在页面本身也是从 latest.json 实时读版本的，双保险。
+  const landingPath = join(apkDir, "index.html");
+  const landingTmp = `${landingPath}.part`;
+  writeFileSync(landingTmp, buildLandingPage(), "utf8");
+  renameSync(landingTmp, landingPath);
+  try {
+    chmodSync(landingPath, 0o644);
+  } catch {
+    /* 非关键 */
+  }
+  console.log(`[mirror] 下载页已写入 ${landingPath}`);
 
   // 到这里就完事了 —— 清单和 APK 都在同一台机器上由 nginx 提供，
   // 不需要再往任何第三方（Gitee）推东西。App 拉清单和下载 APK 走同一个域名。

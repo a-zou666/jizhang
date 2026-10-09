@@ -357,6 +357,22 @@ describe("软件更新（纯逻辑）", () => {
     assert.ok(!mod.UPDATE_RELEASES_PAGE.includes("github.com"));
   });
 
+  it("下载页兜底地址走浏览器端口（:9444），不是 App 端口（:9443）", () => {
+    // 两个端口用**不同的证书**，搞混了用户就会撞上证书警告：
+    //   :9443 = App 内更新（自签证书，App 内置根 CA 才认；浏览器不认）
+    //   :9444 = 用户浏览器打开下载页（Let's Encrypt，零警告）
+    // 所以这个常量的端口**必须是 9444** —— 它是给浏览器用的。
+    assert.match(
+      mod.UPDATE_RELEASES_PAGE,
+      /:9444\/$/,
+      `下载页兜底地址必须指向 :9444（浏览器端口），现在是 ${mod.UPDATE_RELEASES_PAGE}`
+    );
+    assert.ok(
+      !mod.UPDATE_RELEASES_PAGE.includes(":9443"),
+      "下载页不能指向 :9443 —— 那是自签证书，浏览器会报警告"
+    );
+  });
+
   it("更新源域名的 punycode 真的解回 `电脑.tech`（抄错立刻红）", () => {
     // `xn--` 后面是一段 base36，肉眼根本分不出对错：
     // `xn--nyqx68a` 看着也像模像样，实际解出来是 `徳健` —— 等于指向一个不存在的域名，

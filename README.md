@@ -67,13 +67,33 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 设置页 → **软件更新**：App 去自己的分发站读一份几百字节的版本清单，有新版就弹出「版本号 + 更新说明」，
 点**立即下载**用系统浏览器打开 APK 直链，浏览器自动开始下载，下完点一下即可安装。
 
-清单与 APK 都在同一台服务器、同一个域名、同一个证书下 —— 一条链路，没有第三方跳转。
+清单与 APK 都在同一台服务器、同一个域名下 —— 一条链路，没有第三方跳转。
 
 | 用途 | 地址 |
 | --- | --- |
 | 版本清单 | `https://apk.电脑.tech:9443/latest.json` |
 | APK 直链 | `https://apk.电脑.tech:9443/app-arm64-release.apk` |
-| 下载页（手动兜底，手机浏览器可直开） | `https://apk.电脑.tech:9443/` |
+| 下载页（手动兜底，手机浏览器可直开） | `https://apk.电脑.tech:9444/` |
+
+> **注意两个端口的证书不一样，别混**（这一点踩了很久的坑）：
+>
+> | 端口 | 给谁用 | 证书 |
+> | --- | --- | --- |
+> | **9443** | App 内更新（清单 + APK） | **自签**，App 里内置了对应根 CA |
+> | **9444** | 用户浏览器打开下载页 | **Let's Encrypt**，零警告 |
+>
+> 为什么 App 那侧要自签：Let's Encrypt 从 2025 年起换了中间证书体系，`.tech` 域名拿到的链是
+> `域名证书 → YR2 → Root YR → ISRG Root X1`。其中 `Root YR` 是新根，**各家客户端信任库的收录进度极不一致** ——
+> 实测同一个地址：Windows 有、Ubuntu 22.04 没有、部分 Android 机型也没有。表现就是
+> 「电脑浏览器能打开、手机 App 里连不上」，而且换台机器症状还不一样，极难归因。
+>
+> 既然域名和服务器都是自己的，干脆**绕开公共 CA 体系**：服务器用自签根 CA 签证书，App 把这张根 CA
+> 编译进二进制（`src-tauri/certs/apk-ca.crt`，通过 `include_str!` 读入），校验时只认它。
+> 这样免疫所有系统 CA 库差异，也不受 Let's Encrypt 换不换体系影响。根 CA 有效期 **10 年**，
+> 服务器证书 **3 年**；续期只要用同一张根 CA 重签，**App 端不用发版**。
+>
+> 但浏览器不认自签证书，所以下载页另开 9444 走 Let's Encrypt —— 用户点开零警告。
+> 两个端口读的是同一个目录 `/var/www/apk`，内容一致，不用双份维护。
 
 > 站点只放行 `/`、`/index.html`、`/latest.json`、`/*.apk`、`/healthz`，其余一律 404
 > —— 这台机器上还跑着其它生产服务，不能被当成任意文件服务器。
@@ -111,10 +131,10 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 GitHub Actions ──构建+签名──> GitHub Release（只存构建产物）
                                     │ 本机每 5 分钟拉取（下行 174MB/s）
                                     ▼
-                   /var/www/apk + nginx :9443（HTTPS，实测下载 4.7MB/s）
-                                    │
-                                    ▼
-          App → https://apk.电脑.tech:9443/latest.json（唯一地址，不再变）
+                /var/www/apk + nginx
+                  ├─ :9443  自签证书  ← App 内更新（清单 + APK）
+                  └─ :9444  Let's Encrypt ← 用户浏览器打开下载页
+                          （同一个目录，内容一致；实测下载 4.9MB/s）
 ```
 
 比 Gitee 的 463KB/s 快约 **10 倍**，一次同步全程约 10 秒。
@@ -128,18 +148,20 @@ GitHub Actions ──构建+签名──> GitHub Release（只存构建产物）
 | 同步脚本 | `/home/azhou/apk-sync/mirror-apk-to-hk.mjs`（源码在仓库 `scripts/`） |
 | 执行封装（cron 调它） | `/home/azhou/apk-sync/mirror-run.sh` |
 | 定时任务 | `*/5 * * * *` 每 5 分钟一次 |
-| 站点根目录 | `/var/www/apk`（APK + latest.json） |
-| nginx 配置 | `/etc/nginx/sites-enabled/apk-mirror`（独立 server 块，**只监听 9443 HTTPS**） |
-| 密钥/配置 | `/etc/ai-ledger-mirror.env`（`chmod 600`） |
-| TLS 证书 | Let's Encrypt（**DNS-01** 签发，Cloudflare 凭据在 `/etc/letsencrypt/cloudflare.ini`） |
+| 站点根目录 | `/var/www/apk`（APK + latest.json + index.html） |
+| nginx（App，自签） | `/etc/nginx/sites-enabled/apk-mirror`（独立 server 块，**只监听 9443 HTTPS**） |
+| nginx（浏览器，LE） | `/etc/nginx/sites-enabled/apk-web`（独立 server 块，**只监听 9444 HTTPS**） |
+| 自签根 CA / 服务器证书 | `/etc/nginx/ssl-apk/`（`apk-ca.crt`、`apk-server.crt`、`ssl-apk-selfsigned-chain.pem`） |
+| LE 链（剔根 CA） | `/etc/nginx/ssl-apk/le-chain.pem`（由 deploy hook 重建） |
+| 密钥/配置 | `/etc/ai-ledger-mirror.env`（`chmod 600`，含 `PUBLIC_BASE`=9443 / `PAGE_BASE`=9444） |
 | 运行日志 | `/home/azhou/apk-sync/mirror.log`（自动保留最近 500 行） |
 
 脚本做的事：读 GitHub 最新 Release → 按 ABI 下 APK（先写 `.part` 再 `rename`，保证用户不会下到半截文件）
-→ 版本没变就跳过（幂等）→ 生成清单（清单与 APK 的地址都指向本机域名）。
+→ 版本没变就跳过（幂等）→ 生成清单（APK 地址指向 `PUBLIC_BASE`，`page_url` 指向 `PAGE_BASE`）。
 
 > **注意**：这台机器上还跑着别的东西（Caddy 占 80/8443，nginx 占 443/8888 做团队路由反代，
-> docker 跑 New API）。所以 `apk-mirror` 必须是**独立 server 块**、用**独立端口 9443**，
-> 千万不要去改现有配置。也正因为 80 端口被占，证书只能用 **DNS-01** 验证（不碰任何端口）。
+> docker 跑 New API）。所以两个分发站都必须是**独立 server 块**、用**独立端口 9443/9444**，
+> 千万不要去改现有配置。
 
 手动触发一次同步：
 
@@ -148,8 +170,16 @@ ssh azhou@104.208.75.62 '/home/azhou/apk-sync/mirror-run.sh'
 ssh azhou@104.208.75.62 'tail -20 /home/azhou/apk-sync/mirror.log'
 ```
 
-证书是 90 天有效、自动续期（`certbot.timer` 每天两次），续期后由 deploy hook
-（`/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`）自动 reload nginx。
+**证书各自的生命周期：**
+
+| 证书 | 有效期 | 怎么续 |
+| --- | --- | --- |
+| 9443 自签根 CA | 10 年 | 基本不用动；换域名/换 CA 才要重新生成并**重发 App** |
+| 9443 服务器证书 | 3 年 | 用同一张根 CA 重签，**App 不用发版**，只 reload nginx |
+| 9444 Let's Encrypt | 90 天 | `certbot.timer` 自动续期，deploy hook 重建 `le-chain.pem` 并 reload |
+
+> 续期 hook 在 `/etc/letsencrypt/renewal-hooks/deploy/`：`rebuild-apk-chain.sh`（重建 9444 的 LE 链，
+> 剔掉 certbot fullchain 末尾的根 CA）+ `reload-nginx.sh`（reload）。9443 的自签证书不归 certbot 管。
 
 > 为什么不在 App 内直接下载并静默安装：Android 7+ 安装 APK 必须走 FileProvider 生成 `content://` URI 再发
 > `ACTION_VIEW` Intent，而 Tauri 2 的 Rust 侧拿不到 Activity / JNIEnv，官方也没有对应插件；强行 JNI 调用容易

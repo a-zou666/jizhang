@@ -47,7 +47,21 @@ export const DEFAULT_CATEGORIES = ["餐饮", "交通", "数码", "日用", "娱�
  * 对 IDN 的处理不一致，写死了最稳。
  */
 export const UPDATE_HOST = "apk.xn--wnyy6w.tech";
-export const UPDATE_RELEASES_PAGE = `https://${UPDATE_HOST}/`;
+
+/**
+ * 「打开下载页」的兜底地址 —— 指向 **:9444**。
+ *
+ * ## 为什么是 9444 而不是 9443
+ *
+ * 两个端口职责不同，别混：
+ * - **:9443** 是 App 内更新用的（清单 + APK）。证书是**自签**的，App 里内置了
+ *   对应根 CA 所以能验通；但**浏览器不认自签证书**。
+ * - **:9444** 是给用户浏览器看的下载页，走 Let's Encrypt，零警告。
+ *
+ * 这个常量只在「后端没返回 page_url」时兜底 —— 正常情况下清单里的 `page_url`
+ * 已经是 9444 了。放成 9443 的话用户点「打开下载页」会撞上证书警告。
+ */
+export const UPDATE_RELEASES_PAGE = `https://${UPDATE_HOST}:9444/`;
 
 /**
  * 比较两个版本号。返回 true 表示 `remote` 比 `current` 新。
