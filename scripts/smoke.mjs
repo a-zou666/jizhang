@@ -983,11 +983,14 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("改当前连接时同步范围不对", JSON.stringify(store.getProviders().map((p) => [p.name, p.apiKey])));
   } else ok("改当前连接只同步到「已启用的那一家」，其他服务商不受影响");
 
-  // 设默认 / 删除模型
-  store.setProviderModel(deepseek.id, "deepseek-reasoner");
-  if (store.getProvider(deepseek.id).model !== "deepseek-reasoner") {
-    fail("设置默认模型失败", JSON.stringify(store.getProvider(deepseek.id)));
-  } else ok("模型可设为该服务商的默认模型");
+  // 选中模型 = 切到其服务商
+  store.selectModel(deepseek.id, "deepseek-reasoner");
+  if (
+    store.getSettings().model !== "deepseek-reasoner" ||
+    store.getSettings().activeProviderId !== deepseek.id
+  ) {
+    fail("选中模型未切换服务商", JSON.stringify({ ...store.getSettings(), providers: undefined }));
+  } else ok("在「模型选择」里选一个模型即切换到它所属的服务商");
   store.removeProviderModel(deepseek.id, "deepseek-reasoner");
   if (store.getProvider(deepseek.id).models.some((m) => m.id === "deepseek-reasoner")) {
     fail("删除模型失败", JSON.stringify(store.getProvider(deepseek.id)));
@@ -1036,33 +1039,52 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("模型管理空态没渲染出来", String(panel.textContent).slice(0, 160));
   } else ok("模型管理能打开：还没有服务商时给出「添加服务商」引导");
 
-  const provider = store.addProvider({ name: "桩服务商", baseUrl: "https://stub.test", apiKey: "sk-stub" });
-  store.addProviderModels(provider.id, ["stub-a", "stub-b"]);
+  const provider = store.addProvider({
+    name: "桩服务商",
+    baseUrl: "https://stub.test",
+    apiKey: "sk-stub",
+    models: ["stub-a", "stub-b"],
+  });
   models.openModelManager();
   await settle();
-  const row = panel.querySelector(".mm-row");
+  const providersList = panel.querySelector("#mmProviders");
+  const row = providersList?.querySelector(".mm-row");
   const rowText = String(row?.textContent ?? "");
   if (!rowText.includes("桩服务商") || !rowText.includes("2 个模型")) {
     fail("服务商行信息不全", rowText.slice(0, 200));
-  } else ok("服务商行渲染正常：名称 / 地址 / 模型数");
+  } else ok("服务商行渲染正常：名称 / 协议 / 模型数");
 
-  // 点服务商行 = 启用，把它的配置写进当前连接
-  row.querySelector(".mm-row__main").__listeners.get("click")[0]();
-  await settle();
-  if (store.getSettings().baseUrl !== "https://stub.test" || !store.getSettings().model) {
-    fail("点启用后当前连接没切换", JSON.stringify({ ...store.getSettings(), providers: undefined }));
-  } else ok("点服务商行即可启用：地址 / Key / 默认模型写入当前连接");
-
-  // 右侧第一个按钮 = 管理它的模型
-  models.openModelManager();
-  await settle();
-  const actions = panel.querySelector(".mm-row").querySelectorAll(".mm-row__action");
+  // 整行只有一个「设置」按钮，点开编辑弹窗
+  const actions = row.querySelectorAll(".mm-row__action");
+  if (actions.length !== 1) {
+    fail("服务商行按钮数量不对（应只有设置）", `actions=${actions.length}`);
+  }
   actions[0].__listeners.get("click")[0]();
   await settle();
-  const modelRows = panel.querySelectorAll(".mm-row");
-  if (modelRows.length !== 2 || !String(panel.textContent ?? "").includes("stub-a")) {
-    fail("模型列表没渲染出来", `rows=${modelRows.length}`);
-  } else ok(`模型列表渲染正常：${modelRows.length} 个模型（点行设默认、右侧删除）`);
+  if (!panel.querySelector("#pvUrl")) {
+    fail("点设置没打开编辑弹窗", String(panel.textContent).slice(0, 160));
+  } else ok("服务商行只有一个「设置」按钮，打开编辑弹窗");
+
+  // 编辑弹窗内含「可选模型」管理区（拉取 / 添加 / 列表）
+  if (!panel.querySelector("#pvFetch") || !panel.querySelector("#pvModelList")) {
+    fail("编辑弹窗没有可选模型管理区");
+  } else ok("编辑弹窗内含「可选模型」：可添加 / 从 API 拉取");
+
+  // 重开模型管理（丢弃未保存的编辑弹窗），核对模型选择区
+  models.openModelManager();
+  await settle();
+  const choiceList = panel.querySelector("#mmModelChoice");
+  const choice = choiceList?.querySelector(".mm-row");
+  const choiceText = String(choice?.textContent ?? "");
+  if (!choiceText.includes("stub-a")) {
+    fail("模型选择区没列出模型", choiceText);
+  } else ok("「模型选择」列出所有服务商的可选模型（标注所属服务商）");
+
+  choice.querySelector(".mm-row__main").__listeners.get("click")[0]();
+  await settle();
+  if (store.getSettings().activeProviderId !== provider.id || store.getSettings().model !== "stub-a") {
+    fail("点选模型未切换服务商", JSON.stringify({ ...store.getSettings(), providers: undefined }));
+  } else ok("点选模型即切换到它所属服务商（自动换 URL）");
 
   store.replaceAll({ records: [], settings: {} });
 }
@@ -1263,12 +1285,12 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.replaceAll({ records: [], settings: {} });
   store.clearChat();
   const shot = { dataUrl: "data:image/jpeg;base64,FULL", thumb: "data:image/jpeg;base64,THUMB", mime: "image/jpeg" };
-  await chat.sendMessage("", shot);
+  await chat.sendMessage("", [shot]);
 
   const bubbles = list.querySelectorAll(".chat-bubble__image");
   const savedUser = store.getChat()[0];
-  if (bubbles.length !== 1 || savedUser?.image !== shot.thumb) {
-    fail("带图发送没有渲染缩略图", `bubbles=${bubbles.length} image=${savedUser?.image}`);
+  if (bubbles.length !== 1 || savedUser?.images?.[0] !== shot.thumb) {
+    fail("带图发送没有渲染缩略图", `bubbles=${bubbles.length} image=${savedUser?.images?.[0]}`);
   } else ok("只发图片也能发：用户气泡显示缩略图，历史里只存小图（原图不入库）");
 
   const reply = list.querySelectorAll(".chat-row")[1]?.textContent ?? "";
@@ -1279,9 +1301,9 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   // 超大缩略图不入库，避免把本机存储撑爆
   const huge = `data:image/jpeg;base64,${"A".repeat(50_000)}`;
   store.clearChat();
-  store.appendChat({ role: "user", text: "x", kind: "text", state: "done", image: huge });
-  if (store.getChat()[0]?.image !== "") {
-    fail("超大图片没有在入库时被丢弃");
+  store.appendChat({ role: "user", text: "x", kind: "text", state: "done", images: [huge] });
+  if (store.getChat()[0]?.images?.length !== 0) {
+    fail("超大图片没有在入库时被丢弃", JSON.stringify(store.getChat()[0]?.images));
   } else ok("超大缩略图入库时被丢弃：聊天历史不会把本机存储撑爆");
 
   delete globalThis.FileReader;

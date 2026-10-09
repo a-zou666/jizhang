@@ -108,20 +108,18 @@ export async function parseIntent(text, settings, ledger) {
 }
 
 /**
- * 识图记账：把图片（data URL）连同可选的一句话交给视觉模型，
+ * 识图记账：把图片（data URL 数组）连同可选的一句话交给视觉模型，
  * 让它自己从小票 / 账单 / 支付截图里读出每一笔并输出同样的意图 JSON。
- * 用法与 parseIntent 完全一致，前端复用同一套 add / del / query 卡片。
- * @param {string} image data URL（前端已压缩）
- * @param {string} mime 图片 MIME，如 image/jpeg
+ * 支持一次多张图（如多张小票），用法与 parseIntent 完全一致，前端复用同一套 add / del / query 卡片。
+ * @param {string[]} images data URL 数组（前端已压缩）
  */
-export async function parseImage(text, image, mime, settings, ledger) {
+export async function parseImage(text, images, settings, ledger) {
   if (!hasBackend()) return mockImage(text, ledger);
 
   const call = () =>
     invoke("process_image", {
       text,
-      image,
-      mime,
+      images,
       protocol: settings.protocol,
       baseUrl: settings.baseUrl,
       apiKey: settings.apiKey,

@@ -124,7 +124,7 @@ async fn request_model(
     api_model: &str,
     system_prompt: &str,
     user_text: &str,
-    image: Option<&ImageInput>,
+    images: &[ImageInput],
 ) -> Result<String, String> {
     if api_key.trim().is_empty() {
         return Err("请先在设置页填写 API Key".into());
@@ -136,29 +136,22 @@ async fn request_model(
     let url = endpoint(protocol, base_url);
     let http = client()?;
 
-    // 带图时 content 变成「文字 + 图片」的数组，两种协议写法不同
-    let content = match image {
-        None => json!(user_text),
-        Some(img) => {
-            if protocol == "claude" {
-                json!([
-                    {"type": "text", "text": user_text},
-                    {"type": "image", "source": {
-                        "type": "base64",
-                        "media_type": img.mime,
-                        "data": img.data
-                    }}
-                ])
-            } else {
-                json!([
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {
-                        "url": format!("data:{};base64,{}", img.mime, img.data)
-                    }}
-                ])
-            }
+    // 带图时 content 变成「文字 + 多张图片」的数组，两种协议写法不同
+    let mut parts: Vec<serde_json::Value> = vec![json!({"type": "text", "text": user_text})];
+    for img in images {
+        if protocol == "claude" {
+            parts.push(json!({
+                "type": "image",
+                "source": {"type": "base64", "media_type": img.mime, "data": img.data}
+            }));
+        } else {
+            parts.push(json!({
+                "type": "image_url",
+                "image_url": {"url": format!("data:{};base64,{}", img.mime, img.data)}
+            }));
         }
-    };
+    }
+    let content = json!(parts);
 
     let request = if protocol == "claude" {
         http.post(&url)
@@ -477,7 +470,7 @@ async fn process_accounting(
         &api_model,
         &system_prompt,
         trimmed,
-        None, // 纯文本记账，不带图片
+        &[], // 纯文本记账，不带图片
     )
     .await?;
 
@@ -654,19 +647,18 @@ async fn process_intent(
         &api_model,
         &prompt,
         trimmed,
-        None,
+        &[],
     )
     .await?;
 
     parse_intent_content(&content, &categories, &today)
 }
 
-/// 识图记账：把小票 / 支付截图交给视觉模型，解析结果跟文字指令完全一致
+/// 识图记账：把小票 / 支付截图（可多张）交给视觉模型，解析结果跟文字指令完全一致
 #[command]
 async fn process_image(
     text: String,
-    image: String,
-    mime: String,
+    images: Vec<String>,
     protocol: String,
     base_url: String,
     api_key: String,
@@ -674,18 +666,18 @@ async fn process_image(
     categories: Option<Vec<String>>,
     ledger: Option<String>,
 ) -> Result<IntentResult, String> {
-    // 允许前端直接传 data URL，这里只要逗号后面的 base64 正文
-    let data = image.rsplit(',').next().unwrap_or_default().trim().to_string();
-    if data.is_empty() {
-        return Err("图片内容是空的".into());
+    if images.is_empty() {
+        return Err("没有收到图片".into());
     }
-    let media = if mime.trim().is_empty() {
-        "image/jpeg".to_string()
-    } else {
-        mime.trim().to_string()
-    };
+    // 前端直接传 data URL 数组，这里拆出 (mime, base64) 逐个拼进请求
+    let mut image_inputs: Vec<ImageInput> = Vec::with_capacity(images.len());
+    for img in &images {
+        let (media, data) = parse_data_url(img)?;
+        image_inputs.push(ImageInput { mime: media, data });
+    }
+
     let user_text = if text.trim().is_empty() {
-        "请按这张图片记账"
+        "请按这些图片记账"
     } else {
         text.trim()
     };
@@ -694,11 +686,10 @@ async fn process_image(
     let today = today().format("%Y-%m-%d").to_string();
     let mut prompt = intent_prompt(&today, &categories, &ledger.unwrap_or_default());
     prompt.push_str(
-        "\n用户会附上一张图片（小票 / 账单 / 支付截图）：请从图片里读出每一笔消费，\
+        "\n用户会附上若干张图片（小票 / 账单 / 支付截图）：请从这些图片里读出每一笔消费，\
          按上面的规则输出 JSON；图片里没有消费信息或看不清就输出 op=none。",
     );
 
-    let image_input = ImageInput { mime: media, data };
     let content = request_model(
         &normalize_protocol(&protocol),
         &base_url,
@@ -706,11 +697,31 @@ async fn process_image(
         &api_model,
         &prompt,
         user_text,
-        Some(&image_input),
+        &image_inputs,
     )
     .await?;
 
     parse_intent_content(&content, &categories, &today)
+}
+
+/// 从 data URL 拆出 (mime, base64 正文)；允许前端直接传 `data:image/png;base64,xxxx`
+fn parse_data_url(url: &str) -> Result<(String, String), String> {
+    let (meta, data) = url
+        .split_once(',')
+        .ok_or("图片格式不对（不是 data URL）")?;
+    let media = meta
+        .strip_prefix("data:")
+        .unwrap_or("")
+        .split(';')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("image/jpeg")
+        .to_string();
+    let data = data.trim().to_string();
+    if data.is_empty() {
+        return Err("图片内容是空的".into());
+    }
+    Ok((media, data))
 }
 
 #[command]
@@ -723,7 +734,7 @@ async fn test_connection(
     let protocol = normalize_protocol(&protocol);
     let prompt = "只回复两个字：正常";
 
-    match request_model(&protocol, &base_url, &api_key, &api_model, prompt, "连接测试", None).await {
+    match request_model(&protocol, &base_url, &api_key, &api_model, prompt, "连接测试", &[]).await {
         Ok(reply) => Ok(TestResult {
             ok: true,
             message: format!("连接成功：{}", truncate(&reply, 80)),

@@ -92,25 +92,34 @@ describe("模型列表", () => {
     assert.equal(mod.addProviderModels(provider.id, ["m1"]), 0);
   });
 
-  it("设为默认 / 删除模型", () => {
-    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", models: ["m1", "m2"] });
-    mod.setProviderModel(provider.id, "m2");
-    assert.equal(mod.getProvider(provider.id).model, "m2");
+  it("在「模型选择」里选一个模型 = 切换到它所属的服务商", () => {
+    const a = mod.addProvider({ name: "A", baseUrl: "https://a.test", models: ["m1", "m2"] });
+    const b = mod.addProvider({ name: "B", baseUrl: "https://b.test", models: ["x1"] });
+    assert.equal(mod.selectModel(a.id, "m2"), true);
+    assert.equal(mod.getSettings().activeProviderId, a.id);
+    assert.equal(mod.getSettings().model, "m2");
+    assert.equal(mod.getSettings().baseUrl, "https://a.test");
+    assert.equal(mod.getActiveProvider().id, a.id);
 
+    assert.equal(mod.selectModel(b.id, "x1"), true);
+    assert.equal(mod.getSettings().activeProviderId, b.id);
+    assert.equal(mod.getSettings().model, "x1");
+
+    // 不存在的模型 / 服务商：拒绝
+    assert.equal(mod.selectModel(a.id, "nope"), false);
+    assert.equal(mod.selectModel("不存在的 id", "m1"), false);
+    assert.equal(mod.getSettings().activeProviderId, b.id);
+  });
+
+  it("删除模型：删掉的是当前模型时回退到剩下一个", () => {
+    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", models: ["m1", "m2"] });
+    mod.selectModel(provider.id, "m2");
     mod.removeProviderModel(provider.id, "m2");
     assert.deepEqual(
       mod.getProvider(provider.id).models.map((item) => item.id),
       ["m1"],
     );
-    // 被删掉的正好是默认模型时，默认回退到剩下的第一个
-    assert.equal(mod.getProvider(provider.id).model, "m1");
-  });
-
-  it("启用的服务商设默认模型会同步到当前连接", () => {
-    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", models: ["m1", "m2"] });
-    mod.activateProvider(provider.id);
-    mod.setProviderModel(provider.id, "m2");
-    assert.equal(mod.getSettings().model, "m2");
+    assert.equal(mod.getSettings().model, "m1");
   });
 });
 
@@ -209,33 +218,33 @@ describe("对话里的图片（识图记账）", () => {
 
   it("消息里只存缩略图，非法 / 超大图片不入库", () => {
     mod.clearChat();
-    mod.appendChat({ role: "user", text: "小票", kind: "text", state: "done", image: thumb });
-    assert.equal(mod.getChat()[0].image, thumb);
+    mod.appendChat({ role: "user", text: "小票", kind: "text", state: "done", images: [thumb] });
+    assert.equal(mod.getChat()[0].images[0], thumb);
 
-    mod.appendChat({ role: "user", text: "假图", image: "javascript:alert(1)" });
-    mod.appendChat({ role: "user", text: "大图", image: `data:image/png;base64,${"A".repeat(50_000)}` });
-    assert.equal(mod.getChat()[1].image, "");
-    assert.equal(mod.getChat()[2].image, "");
+    mod.appendChat({ role: "user", text: "假图", images: ["javascript:alert(1)"] });
+    mod.appendChat({ role: "user", text: "大图", images: [`data:image/png;base64,${"A".repeat(50_000)}`] });
+    assert.equal(mod.getChat()[1].images.length, 0);
+    assert.equal(mod.getChat()[2].images.length, 0);
   });
 
   it("缩略图只保留最近若干条，更早的消息文字照旧", () => {
     mod.clearChat();
     for (let i = 0; i < 40; i += 1) {
-      mod.appendChat({ role: "user", text: `第 ${i} 条`, kind: "text", state: "done", image: thumb });
+      mod.appendChat({ role: "user", text: `第 ${i} 条`, kind: "text", state: "done", images: [thumb] });
     }
     const chat = mod.getChat();
     assert.equal(chat.length, 40);
-    assert.equal(chat.filter((item) => item.image).length, 30);
-    assert.equal(chat[0].image, "");
+    assert.equal(chat.filter((item) => item.images.length).length, 30);
+    assert.equal(chat[0].images.length, 0);
     assert.equal(chat[0].text, "第 0 条");
-    assert.equal(chat.at(-1).image, thumb);
+    assert.equal(chat.at(-1).images[0], thumb);
   });
 
   it("清空对话把图片一起清掉，账目不受影响", () => {
     mod.clearChat();
     mod.addRecords([{ date: "2026-10-08", item: "鼠标", category: "数码", amount: 120 }]);
-    mod.appendChat({ role: "user", text: "小票", kind: "text", state: "done", image: thumb });
-    assert.equal(mod.getChat()[0].image, thumb);
+    mod.appendChat({ role: "user", text: "小票", kind: "text", state: "done", images: [thumb] });
+    assert.equal(mod.getChat()[0].images[0], thumb);
 
     mod.clearChat();
     assert.deepEqual(mod.getChat(), []);

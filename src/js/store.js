@@ -248,6 +248,8 @@ const CHAT_LIMIT = 200;
 export const CHAT_IMAGE_LIMIT = 40_000;
 /** 缩略图只保留最近若干条：更早的消息清掉图片、文字照旧留着 */
 const CHAT_IMAGE_KEEP = 30;
+/** 单条消息最多保留多少张缩略图（多张小票也能存，但别太离谱） */
+const MAX_CHAT_IMAGES = 12;
 
 /** 只放行「真的是图片且不太大」的缩略图，其余一律丢弃（不影响文字与其他字段） */
 function sanitizeChatImage(raw) {
@@ -255,22 +257,22 @@ function sanitizeChatImage(raw) {
   return raw.length > CHAT_IMAGE_LIMIT ? "" : raw;
 }
 
-/** 从后往前数，超过 CHAT_IMAGE_KEEP 条带图的消息就丢掉缩略图（文字保留） */
+/** 从后往前数，超过 CHAT_IMAGE_KEEP 条带图的消息就把它的图片清空（文字保留） */
 function pruneChatImages(messages) {
   let seen = 0;
   const out = messages.slice();
   for (let index = out.length - 1; index >= 0; index -= 1) {
-    if (!out[index].image) continue;
+    if (!out[index].images?.length) continue;
     seen += 1;
-    if (seen > CHAT_IMAGE_KEEP) out[index] = { ...out[index], image: "" };
+    if (seen > CHAT_IMAGE_KEEP) out[index] = { ...out[index], images: [] };
   }
   return out;
 }
 
 /**
- * 消息：{ id, role: "user" | "assistant", text, kind, items[], state, at, image }
+ * 消息：{ id, role: "user" | "assistant", text, kind, items[], state, at, images }
  * kind: text（纯聊天）/ add（待入账）/ del（待删除）/ query（查询结果）
- * image: 用户发的图片缩略图（data URL，超上限会自动丢弃）
+ * images: 用户发的图片缩略图数组（data URL，超上限会自动丢弃），支持一次发多张
  * 账目快照直接存在消息里，重进界面才能原样还原，不用重新问一遍 AI
  */
 function sanitizeChatMessage(raw) {
@@ -280,6 +282,16 @@ function sanitizeChatMessage(raw) {
   const items = Array.isArray(raw.items)
     ? raw.items.map(sanitizeRecord).filter(Boolean).slice(0, 50)
     : [];
+  // 兼容老数据：旧字段 image（单张）并入 images（数组）
+  const rawImages = Array.isArray(raw.images)
+    ? raw.images
+    : raw.image
+      ? [raw.image].filter(Boolean)
+      : [];
+  const images = rawImages
+    .map(sanitizeChatImage)
+    .filter(Boolean)
+    .slice(0, MAX_CHAT_IMAGES);
   return {
     id: String(raw.id ?? uid()),
     role,
@@ -288,7 +300,7 @@ function sanitizeChatMessage(raw) {
     items,
     state: ["pending", "done", "ignored", "error"].includes(raw.state) ? raw.state : "done",
     at: Number.isFinite(Number(raw.at)) ? Number(raw.at) : Date.now(),
-    image: sanitizeChatImage(raw.image),
+    images,
   };
 }
 
@@ -648,6 +660,28 @@ export function activateProvider(id) {
 }
 
 /**
+ * 在「模型选择」里点一个模型：它属于哪个服务商，就切换到那个服务商。
+ * 与 activateProvider 的区别——这里由「选中的具体模型」驱动，而不是
+ * 启用整家服务商并沿用它的默认模型；这样「当前用的模型」是显式选出来的，
+ * 切到 Minimax 就走 Minimax 的 URL，切到智谱就走智谱的 URL。
+ */
+export function selectModel(providerId, modelId) {
+  const provider = getProvider(providerId);
+  if (!provider) return false;
+  if (!provider.models.some((item) => item.id === modelId)) return false;
+  state.settings = {
+    ...state.settings,
+    protocol: provider.protocol,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey,
+    model: modelId,
+    activeProviderId: provider.id,
+  };
+  commit("settings");
+  return true;
+}
+
+/**
  * 当前连接参数改动：写进顶层，同时同步到已启用的服务商
  * （只同步用户正在编辑的这一家，不会去碰别的服务商，也不会自动切换）
  */
@@ -696,21 +730,6 @@ export function removeProviderModel(id, modelId) {
   if (state.settings.activeProviderId === id && state.settings.model === modelId) {
     patchConnection({ model: models[0]?.id ?? "" });
   }
-  return true;
-}
-
-/** 设为该服务商的默认模型；若它正是当前启用的服务商，同步到当前连接 */
-export function setProviderModel(id, modelId) {
-  const provider = getProvider(id);
-  if (!provider) return false;
-  const inList = provider.models.some((item) => item.id === modelId);
-  const providers = state.settings.providers.map((item) =>
-    item.id === id
-      ? { ...item, model: modelId, models: inList ? item.models : [...item.models, { id: modelId, alias: "" }] }
-      : item,
-  );
-  writeProviders(providers);
-  if (state.settings.activeProviderId === id) patchConnection({ model: modelId });
   return true;
 }
 

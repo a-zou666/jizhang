@@ -101,7 +101,7 @@ const chat = [
     items: [],
     state: "done",
     at: at(8, 10),
-    image: receiptThumb,
+    images: [receiptThumb],
   },
   {
     id: "c2c",

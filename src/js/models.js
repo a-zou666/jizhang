@@ -1,4 +1,4 @@
-/** 模型管理：服务商（模型供应商）+ 各自模型的增删改查 */
+/** 模型管理：服务商管理（连接配置）+ 模型选择（当前用哪个） */
 
 import { listModels } from "./bridge.js";
 import { hydrateIcons } from "./icons.js";
@@ -6,55 +6,51 @@ import {
   PROTOCOL_ORDER,
   PROTOCOL_PRESETS,
   PROVIDER_PRESETS,
-  activateProvider,
   addProvider,
   addProviderModels,
-  getActiveProvider,
   getProvider,
   getProviders,
   getSettings,
+  patchConnection,
   removeProvider,
   removeProviderModel,
-  setProviderModel,
+  selectModel,
   updateProvider,
 } from "./store.js";
 import { closeModal, confirmDialog, openModal, toast } from "./ui.js";
 import { buildEndpoint, el, escapeHtml } from "./util.js";
 
-/* ================= 一级：服务商列表 ================= */
+/* ================= 一级：模型管理（服务商管理 + 模型选择） ================= */
 export function openModelManager(onClose = null) {
   openModal(
     `<p class="modal-title">模型管理</p>
-     <p class="t-footnote mm-hint">服务商与模型都在这里手动维护；点「启用」才会写入当前连接</p>
-     <div class="mm-list" id="mmList"></div>
+     <p class="t-footnote mm-hint">先在「服务商管理」里添加并配置每个服务商有哪些模型，再到下方「模型选择」挑一个用</p>
+     <div class="mm-section">
+       <div class="mm-section__head">
+         <span class="mm-section__title">服务商管理</span>
+         <button class="primary-btn primary-btn--compact" id="mmAdd" type="button">添加服务商</button>
+       </div>
+       <div class="mm-list" id="mmProviders"></div>
+     </div>
+     <div class="mm-section">
+       <div class="mm-section__head">
+         <span class="mm-section__title">模型选择</span>
+       </div>
+       <p class="t-footnote mm-hint">点一个模型即切换到它所属的服务商（自动换 URL）</p>
+       <div class="mm-list" id="mmModelChoice"></div>
+     </div>
      <div class="modal-actions">
        <button class="ghost-btn" id="mmClose" type="button">关闭</button>
-       <button class="primary-btn primary-btn--compact" id="mmAdd" type="button">添加服务商</button>
      </div>`,
     {
       onClose: onClose ?? undefined,
       onMount: (panel) => {
-        const list = panel.querySelector("#mmList");
-        // 进二级再回来时，整个一级面板要重建（弹窗内容是共用的一个容器）
+        // 进二级（编辑 / 拉取）再回来时，整个面板重建
         const reopen = () => openModelManager(onClose);
-
-        function paint() {
-          const providers = getProviders();
-          const activeId = getSettings().activeProviderId;
-          if (!providers.length) {
-            list.replaceChildren(
-              el("p", {
-                class: "mm-empty",
-                text: "还没有服务商。点下方「添加服务商」，填好名称 / 地址 / Key，再添加它家的模型。",
-              }),
-            );
-            return;
-          }
-          list.replaceChildren(
-            ...providers.map((provider) => providerRow(provider, provider.id === activeId, paint, reopen)),
-          );
-          hydrateIcons(list);
-        }
+        const paint = () => {
+          paintProviders(panel.querySelector("#mmProviders"), reopen);
+          paintModelChoice(panel.querySelector("#mmModelChoice"), paint);
+        };
 
         panel.querySelector("#mmClose").addEventListener("click", closeModal);
         panel.querySelector("#mmAdd").addEventListener("click", () => openProviderEditor(null, reopen));
@@ -64,8 +60,24 @@ export function openModelManager(onClose = null) {
   );
 }
 
-function providerRow(provider, isActive, repaint, reopen) {
-  const main = el("button", { class: "mm-row__main", type: "button" }, [
+function paintProviders(list, reopen) {
+  const providers = getProviders();
+  if (!providers.length) {
+    list.replaceChildren(
+      el("p", {
+        class: "mm-empty",
+        text: "还没有服务商。点上方「添加服务商」，填好名称 / 地址 / Key，并配置它家可用的模型。",
+      }),
+    );
+    return;
+  }
+  list.replaceChildren(...providers.map((provider) => providerRow(provider, reopen)));
+  hydrateIcons(list);
+}
+
+function providerRow(provider, reopen) {
+  const isActive = getSettings().activeProviderId === provider.id;
+  const main = el("div", { class: "mm-row__main" }, [
     el("span", { class: "mm-row__title" }, [
       el("span", { text: provider.name }),
       isActive ? el("span", { class: "mm-badge", text: "当前" }) : null,
@@ -76,34 +88,62 @@ function providerRow(provider, isActive, repaint, reopen) {
         PROTOCOL_PRESETS[provider.protocol]?.label ?? "OpenAI 兼容",
         provider.baseUrl || "未设置地址",
         `${provider.models.length} 个模型`,
-        provider.model ? `默认 ${provider.model}` : "未选默认模型",
       ].join(" · "),
     }),
   ]);
-  main.addEventListener("click", () => {
-    if (isActive) return toast(`${provider.name} 已是当前服务商`, "ok");
-    activateProvider(provider.id);
-    repaint();
-    toast(`已启用 ${provider.name}`, "ok");
-  });
 
-  const modelsBtn = el("button", {
+  // 整行只挂一个「设置」按钮：打开编辑（连接信息 + 可选模型都在里面）
+  const setBtn = el("button", {
     class: "mm-row__action",
     type: "button",
-    "aria-label": `管理 ${provider.name} 的模型`,
-    html: '<span data-icon="sparkles"></span>',
-  });
-  modelsBtn.addEventListener("click", () => openModelList(provider.id, reopen));
-
-  const editBtn = el("button", {
-    class: "mm-row__action",
-    type: "button",
-    "aria-label": `编辑 ${provider.name}`,
+    "aria-label": `设置 ${provider.name}`,
     html: '<span data-icon="settingsOutline"></span>',
   });
-  editBtn.addEventListener("click", () => openProviderEditor(provider.id, reopen));
+  setBtn.addEventListener("click", () => openProviderEditor(provider.id, reopen));
 
-  return el("div", { class: `mm-row${isActive ? " is-active" : ""}` }, [main, modelsBtn, editBtn]);
+  return el("div", { class: `mm-row${isActive ? " is-active" : ""}` }, [main, setBtn]);
+}
+
+/* ================= 模型选择：跨服务商聚合 ================= */
+function paintModelChoice(list, repaint) {
+  const providers = getProviders();
+  const { activeProviderId, model: currentModel } = getSettings();
+  const choices = [];
+  for (const provider of providers) {
+    for (const model of provider.models) {
+      choices.push({
+        provider,
+        model,
+        isCurrent: activeProviderId === provider.id && currentModel === model.id,
+      });
+    }
+  }
+  if (!choices.length) {
+    list.replaceChildren(
+      el("p", { class: "mm-empty", text: "还没有可选模型：去上方服务商里添加，或「从 API 拉取」。" }),
+    );
+    return;
+  }
+  list.replaceChildren(...choices.map((item) => choiceRow(item, repaint)));
+  hydrateIcons(list);
+}
+
+function choiceRow(item, repaint) {
+  const { provider, model, isCurrent } = item;
+  const main = el("button", { class: "mm-row__main", type: "button" }, [
+    el("span", { class: "mm-row__title" }, [
+      el("span", { text: model.alias || model.id }),
+      isCurrent ? el("span", { class: "mm-badge", text: "在用" }) : null,
+    ]),
+    el("span", { class: "mm-row__desc", text: `${provider.name} · ${model.id}` }),
+  ]);
+  main.addEventListener("click", () => {
+    if (isCurrent) return toast(`${provider.name} · ${model.id} 已是当前模型`, "ok");
+    selectModel(provider.id, model.id);
+    repaint();
+    toast(`已切换到 ${provider.name}`, "ok");
+  });
+  return el("div", { class: `mm-row${isCurrent ? " is-active" : ""}` }, [main]);
 }
 
 /* ================= 服务商编辑 / 新增 ================= */
@@ -111,24 +151,30 @@ function openProviderEditor(id, onDone) {
   const editing = id ? getProvider(id) : null;
   const current = editing ?? { name: "", protocol: "openai-compatible", baseUrl: "", apiKey: "" };
 
-  // 默认模型直接在服务商表单里选：不用跑到模型列表再设一遍
-  const modelOptions = editing?.models.length
-    ? editing.models
-        .map(
-          (model) =>
-            `<option value="${escapeHtml(model.id)}"${model.id === editing.model ? " selected" : ""}>${
-              model.alias ? `${escapeHtml(model.alias)}（${escapeHtml(model.id)}）` : escapeHtml(model.id)
-            }</option>`,
-        )
-        .join("")
-    : "";
-
   // 新增时才给预设：点一下把名称 / 协议 / 地址和这家常用模型一起带上
   const presetBlock = editing
     ? ""
     : `<div class="mm-presets">
          <span class="mm-field__label">常用服务商（点一下自动填）</span>
          <div class="chip-row" id="pvPresetRow"></div>
+       </div>`;
+
+  // 编辑时才有「可选模型」管理区；新增保存后点「设置」再配置
+  const modelSection = editing
+    ? `<div class="mm-section mm-models">
+         <div class="mm-section__head">
+           <span class="mm-section__title">可选模型</span>
+           <button class="show-key-btn" id="pvFetch" type="button">从 API 拉取</button>
+         </div>
+         <div class="mm-list" id="pvModelList"></div>
+         <div class="settings-input-row" style="margin-top:var(--space-3)">
+           <input class="settings-input" id="pvModelId" type="text" spellcheck="false"
+                  autocapitalize="off" placeholder="模型 ID，如 deepseek-chat" />
+           <button class="show-key-btn" id="pvModelAdd" type="button">添加</button>
+         </div>
+       </div>`
+    : `<div class="mm-section mm-models">
+         <p class="t-footnote mm-hint" style="margin:0">保存后点这家的「设置」，即可在这里添加模型或「从 API 拉取」。</p>
        </div>`;
 
   openModal(
@@ -161,20 +207,8 @@ function openProviderEditor(id, onDone) {
                 autocapitalize="off" placeholder="sk-..." />
          <span class="mm-field__hint" id="pvKeyHint"></span>
        </label>
-       ${
-         editing
-           ? `<label class="mm-field">
-                <span class="mm-field__label">默认模型</span>
-                <select class="settings-input" id="pvModel">
-                  ${
-                    modelOptions ||
-                    '<option value="">还没有模型，先在「模型」里添加</option>'
-                  }
-                </select>
-              </label>`
-           : ""
-       }
      </div>
+     ${modelSection}
      <div class="modal-actions">
        ${editing ? '<button class="ghost-btn ghost-btn--danger" id="pvDelete" type="button">删除</button>' : ""}
        <button class="ghost-btn" id="pvCancel" type="button">取消</button>
@@ -238,10 +272,11 @@ function openProviderEditor(id, onDone) {
           if (!baseUrl) return toast("请填写接口地址", "error");
 
           if (editing) {
-            const model = panel.querySelector("#pvModel")?.value.trim() ?? editing.model;
-            updateProvider(editing.id, { name, protocol, baseUrl, apiKey, model });
-            // 正在用的这家被改了参数，当前连接跟着更新
-            if (getSettings().activeProviderId === editing.id) activateProvider(editing.id);
+            updateProvider(editing.id, { name, protocol, baseUrl, apiKey });
+            // 正在用的这家改了连接参数，当前连接跟着更新（模型选择不变）
+            if (getSettings().activeProviderId === editing.id) {
+              patchConnection({ protocol, baseUrl, apiKey });
+            }
             toast("已保存", "ok");
           } else {
             addProvider({
@@ -254,8 +289,8 @@ function openProviderEditor(id, onDone) {
             });
             toast(
               picked
-                ? `已添加 ${name}（预置 ${picked.models.length} 个模型，点右侧 ✨ 挑一个设为默认）`
-                : `已添加 ${name}（在列表里点它即可启用）`,
+                ? `已添加 ${name}（预置 ${picked.models.length} 个模型，点「设置」可继续加）`
+                : `已添加 ${name}（在列表里点它右侧 ⚙ 即可添加模型）`,
               "ok",
             );
           }
@@ -276,88 +311,53 @@ function openProviderEditor(id, onDone) {
             },
           });
         });
-      },
-    },
-  );
-}
 
-/* ================= 二级：某服务商的模型 ================= */
-function openModelList(providerId, onDone) {
-  const provider = getProvider(providerId);
-  if (!provider) return onDone?.();
+        // 编辑态：渲染「可选模型」管理区
+        if (editing) {
+          const providerId = editing.id;
+          const paintModels = () => {
+            const currentProvider = getProvider(providerId);
+            const models = currentProvider?.models ?? [];
+            const listEl = panel.querySelector("#pvModelList");
+            if (!models.length) {
+              listEl.replaceChildren(
+                el("p", { class: "mm-empty", text: "还没模型：手动填一个 ID，或点「从 API 拉取」。" }),
+              );
+              return;
+            }
+            listEl.replaceChildren(...models.map((model) => modelChip(providerId, model, paintModels)));
+            hydrateIcons(listEl);
+          };
+          paintModels();
 
-  openModal(
-    `<p class="modal-title">模型 · ${escapeHtml(provider.name)}</p>
-     <p class="t-footnote mm-hint">点某个模型设为默认；也可以手动添加模型 ID，或从 API 拉取后勾选</p>
-     <div class="mm-list" id="mmModelList"></div>
-     <div class="settings-input-row" style="margin-top:var(--space-3)">
-       <input class="settings-input" id="mmModelId" type="text" spellcheck="false"
-              autocapitalize="off" placeholder="模型 ID，如 deepseek-chat" />
-       <button class="show-key-btn" id="mmModelAdd" type="button">添加</button>
-     </div>
-     <div class="modal-actions">
-       <button class="ghost-btn" id="mmModelFetch" type="button">从 API 拉取</button>
-       <button class="primary-btn primary-btn--compact" id="mmModelDone" type="button">完成</button>
-     </div>`,
-    {
-      onClose: onDone ?? undefined,
-      onMount: (panel) => {
-        const list = panel.querySelector("#mmModelList");
-
-        function paint() {
-          const current = getProvider(providerId);
-          if (!current) return;
-          if (!current.models.length) {
-            list.replaceChildren(
-              el("p", { class: "mm-empty", text: "还没有模型：手动填一个 ID，或点「从 API 拉取」勾选加入。" }),
-            );
-            return;
-          }
-          list.replaceChildren(...current.models.map((model) => modelRow(providerId, model, current.model, paint)));
-          hydrateIcons(list);
+          const addOne = () => {
+            const input = panel.querySelector("#pvModelId");
+            const modelId = input.value.trim();
+            if (!modelId) return toast("请填写模型 ID", "error");
+            const added = addProviderModels(providerId, [modelId]);
+            if (!added) return toast("这个模型已经在列表里了", "error");
+            input.value = "";
+            paintModels();
+            toast(`已添加 ${modelId}`, "ok");
+          };
+          panel.querySelector("#pvModelAdd").addEventListener("click", addOne);
+          panel.querySelector("#pvModelId").addEventListener("keydown", (event) => {
+            if (event.key === "Enter") addOne();
+          });
+          panel.querySelector("#pvFetch").addEventListener("click", () => {
+            fetchModelsInto(providerId, paintModels);
+          });
         }
-
-        const addOne = () => {
-          const input = panel.querySelector("#mmModelId");
-          const id = input.value.trim();
-          if (!id) return toast("请填写模型 ID", "error");
-          const added = addProviderModels(providerId, [id]);
-          if (!added) return toast("这个模型已经在列表里了", "error");
-          input.value = "";
-          paint();
-          toast(`已添加 ${id}`, "ok");
-        };
-
-        panel.querySelector("#mmModelAdd").addEventListener("click", addOne);
-        panel.querySelector("#mmModelId").addEventListener("keydown", (event) => {
-          if (event.key === "Enter") addOne();
-        });
-        panel.querySelector("#mmModelDone").addEventListener("click", closeModal);
-        panel.querySelector("#mmModelFetch").addEventListener("click", () => {
-          fetchModelsInto(providerId, paint);
-        });
-
-        paint();
       },
     },
   );
 }
 
-function modelRow(providerId, model, defaultId, repaint) {
-  const isDefault = model.id === defaultId;
-  const main = el("button", { class: "mm-row__main", type: "button" }, [
-    el("span", { class: "mm-row__title" }, [
-      el("span", { text: model.alias || model.id }),
-      isDefault ? el("span", { class: "mm-badge", text: "默认" }) : null,
-    ]),
+function modelChip(providerId, model, repaint) {
+  const main = el("div", { class: "mm-row__main" }, [
+    el("span", { class: "mm-row__title", text: model.alias || model.id }),
     model.alias ? el("span", { class: "mm-row__desc", text: model.id }) : null,
   ]);
-  main.addEventListener("click", () => {
-    if (isDefault) return toast(`${model.id} 已是默认模型`, "ok");
-    setProviderModel(providerId, model.id);
-    repaint();
-    toast(`默认模型：${model.id}`, "ok");
-  });
 
   const remove = el("button", {
     class: "mm-row__action",
@@ -366,9 +366,10 @@ function modelRow(providerId, model, defaultId, repaint) {
     html: '<span data-icon="trash"></span>',
   });
   remove.addEventListener("click", () => {
+    const provider = getProvider(providerId);
     confirmDialog({
       title: "删除模型",
-      message: `从列表中移除 ${model.id}（只是不在这个 App 里显示，不会动服务商上的模型）。`,
+      message: `从 ${provider?.name ?? "该服务商"} 移除 ${model.id}（只是不在这个 App 里显示，不会动服务商上的模型）。`,
       confirmLabel: "删除",
       danger: true,
       onConfirm: () => {
@@ -378,7 +379,7 @@ function modelRow(providerId, model, defaultId, repaint) {
     });
   });
 
-  return el("div", { class: `mm-row${isDefault ? " is-active" : ""}` }, [main, remove]);
+  return el("div", { class: "mm-row" }, [main, remove]);
 }
 
 /* ================= 从 API 拉取后勾选加入 ================= */
@@ -444,4 +445,3 @@ export async function fetchModelsInto(providerId, repaint) {
     },
   );
 }
-

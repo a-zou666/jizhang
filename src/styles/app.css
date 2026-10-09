@@ -1844,11 +1844,41 @@ a {
   text-align: center;
 }
 
+.mm-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-light);
+}
+
+.mm-section:first-of-type {
+  margin-top: var(--space-3);
+  padding-top: 0;
+  border-top: none;
+}
+
+.mm-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.mm-section__title {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.mm-models {
+  margin-top: var(--space-4);
+}
+
 .mm-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-height: 42vh;
+  max-height: 38vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -2223,12 +2253,18 @@ a {
 /* 选好待发送的图片：缩略图 + 移除 */
 .chat-attach {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
 
 .chat-attach[hidden] {
   display: none;
+}
+
+.chat-attach__item {
+  position: relative;
+  display: inline-flex;
 }
 
 .chat-attach__img {
@@ -2240,13 +2276,15 @@ a {
 }
 
 .chat-attach__meta {
-  flex: 1;
+  flex: 1 1 100%;
   font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
 .chat-attach__remove {
-  flex-shrink: 0;
+  position: absolute;
+  top: -0.4rem;
+  right: -0.4rem;
   display: grid;
   place-items: center;
   width: 1.5rem;
@@ -2254,13 +2292,21 @@ a {
   border-radius: var(--radius-full);
   color: var(--text-secondary);
   background: var(--surface-hover);
+  box-shadow: var(--shadow-xs);
+}
+
+.chat-bubble__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .chat-bubble__image {
   display: block;
   width: 100%;
   max-width: 11rem;
-  margin-bottom: var(--space-2);
+  margin-bottom: 0;
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-hairline);
 }

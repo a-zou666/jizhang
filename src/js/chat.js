@@ -3,7 +3,7 @@
 import { hasBackend, parseImage, parseIntent } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
 import { icon } from "./icons.js";
-import { prepareImage } from "./image.js";
+import { prepareImages } from "./image.js";
 import {
   addRecords,
   appendChat,
@@ -27,12 +27,19 @@ const SUGGESTIONS = [
 ];
 
 let busy = false;
-/** 已选好、还没发出去的图片（发出后清空；只留缩略图进历史） */
-let pendingImage = null;
+/** 一次最多挂几张待发送图片 */
+const MAX_PENDING_IMAGES = 9;
+/** 已选好、还没发出去的图片（数组，发出后清空；只留缩略图进历史） */
+let pendingImages = [];
 
-/* ---------------- 待发送的图片 ---------------- */
-function setPendingImage(image) {
-  pendingImage = image ?? null;
+/* ---------------- 待发送的图片（可多张） ---------------- */
+function setPendingImages(list) {
+  pendingImages = (list ?? []).slice(-MAX_PENDING_IMAGES);
+  renderAttach();
+}
+
+function clearPendingImages() {
+  pendingImages = [];
   renderAttach();
 }
 
@@ -40,38 +47,52 @@ function renderAttach() {
   const box = $("#chatAttach");
   if (!box) return;
   box.replaceChildren();
-  box.hidden = !pendingImage;
+  box.hidden = pendingImages.length === 0;
 
   const input = $("#chatInput");
   if (input) {
-    input.placeholder = pendingImage ? "补充说明（可留空）" : "说点什么…";
+    input.placeholder = pendingImages.length ? "补充说明（可留空）" : "说点什么…";
   }
-  if (!pendingImage) return;
-
-  const thumb = document.createElement("img");
-  thumb.classList.add("chat-attach__img");
-  thumb.src = pendingImage.thumb || pendingImage.dataUrl;
-  thumb.alt = "待发送的图片";
+  if (!pendingImages.length) return;
 
   const meta = document.createElement("span");
   meta.classList.add("chat-attach__meta");
-  meta.textContent = "已选好图片";
+  meta.textContent = `已选 ${pendingImages.length} 张`;
+  box.append(meta);
 
-  const remove = document.createElement("button");
-  remove.classList.add("chat-attach__remove");
-  remove.type = "button";
-  remove.setAttribute("aria-label", "移除图片");
-  remove.innerHTML = icon("close", { size: 14 });
-  remove.addEventListener("click", () => setPendingImage(null));
+  pendingImages.forEach((img, idx) => {
+    const item = document.createElement("div");
+    item.classList.add("chat-attach__item");
 
-  box.append(thumb, meta, remove);
+    const thumb = document.createElement("img");
+    thumb.classList.add("chat-attach__img");
+    thumb.src = img.thumb || img.dataUrl;
+    thumb.alt = `待发送图片 ${idx + 1}`;
+
+    const remove = document.createElement("button");
+    remove.classList.add("chat-attach__remove");
+    remove.type = "button";
+    remove.setAttribute("aria-label", "移除这张图片");
+    remove.innerHTML = icon("close", { size: 14 });
+    remove.addEventListener("click", () => setPendingImages(pendingImages.filter((_, i) => i !== idx)));
+
+    item.append(thumb, remove);
+    box.append(item);
+  });
 }
 
-/** 选完图：压缩 + 生成缩略图，失败只提示不打断输入 */
-async function onPickImage(file) {
+/** 选完图：批量压缩 + 生成缩略图，失败只提示不打断输入 */
+async function onPickImages(fileList) {
+  const files = Array.from(fileList && fileList.length ? fileList : []);
+  if (!files.length) return;
+  const room = MAX_PENDING_IMAGES - pendingImages.length;
+  if (room <= 0) {
+    toast(`最多同时选 ${MAX_PENDING_IMAGES} 张`, "error");
+    return;
+  }
   try {
-    const prepared = await prepareImage(file);
-    setPendingImage(prepared);
+    const prepared = await prepareImages(files.slice(0, room));
+    setPendingImages([...pendingImages, ...prepared]);
     haptic(8);
   } catch (error) {
     console.error(error);
@@ -142,12 +163,17 @@ function bubbleFor(message) {
   const body = document.createElement("div");
   body.classList.add("chat-bubble");
 
-  if (message.image) {
-    const image = document.createElement("img");
-    image.classList.add("chat-bubble__image");
-    image.src = message.image;
-    image.alt = "上传的图片";
-    body.append(image);
+  if (message.images?.length) {
+    const gallery = document.createElement("div");
+    gallery.classList.add("chat-bubble__images");
+    for (const src of message.images) {
+      const image = document.createElement("img");
+      image.classList.add("chat-bubble__image");
+      image.src = src;
+      image.alt = "上传的图片";
+      gallery.append(image);
+    }
+    body.append(gallery);
   }
 
   if (message.text) {
@@ -269,11 +295,11 @@ function button(label, className, onClick) {
 }
 
 /* ---------------- 发送 ---------------- */
-export async function sendMessage(raw, image = pendingImage) {
+export async function sendMessage(raw, images = pendingImages) {
   const text = String(raw ?? "").trim();
   const input = $("#chatInput");
   if (busy) return;
-  if (!text && !image) return;
+  if (!text && !images?.length) return;
 
   if (hasBackend() && !getSettings().apiKey) {
     toast("请先在设置 → 模型管理里配好服务商", "error");
@@ -283,7 +309,7 @@ export async function sendMessage(raw, image = pendingImage) {
   busy = true;
   $("#chatSend").disabled = true;
   if (input) input.value = "";
-  if (image) setPendingImage(null);
+  if (images?.length) clearPendingImages();
 
   appendChat({
     role: "user",
@@ -291,7 +317,7 @@ export async function sendMessage(raw, image = pendingImage) {
     kind: "text",
     state: "done",
     at: Date.now(),
-    image: image?.thumb ?? "",
+    images: (images ?? []).map((item) => item.thumb).filter(Boolean),
   });
   const thinking = appendChat({
     role: "assistant",
@@ -303,7 +329,7 @@ export async function sendMessage(raw, image = pendingImage) {
   renderChat();
 
   try {
-    const result = await (image ? runImage(text, image) : runIntent(text));
+    const result = await (images?.length ? runImage(text, images) : runIntent(text));
     updateChat(thinking.id, result);
   } catch (error) {
     console.error(error);
@@ -326,10 +352,11 @@ async function runIntent(text) {
   return routeIntent(result, byLineId);
 }
 
-/** 识图记账：把图片交给视觉模型，回来后走同一套 add / del / query 路由 */
-async function runImage(text, image) {
+/** 识图记账：把多张图片交给视觉模型，回来后走同一套 add / del / query 路由 */
+async function runImage(text, images) {
   const { lines, byLineId } = buildLedger();
-  const result = await parseImage(text, image.dataUrl, image.mime, getSettings(), lines);
+  const dataUrls = images.map((item) => item.dataUrl);
+  const result = await parseImage(text, dataUrls, getSettings(), lines);
   return routeIntent(result, byLineId);
 }
 
@@ -395,17 +422,17 @@ export function bindChat({ onNeedSettings } = {}) {
     }
   });
 
-  // 识图记账：点图标选图，选好后挂在输入区上方，发送时一起给模型
+  // 识图记账：点图标选图（可多选），选好后挂在输入区上方，发送时一起给模型
   const imageBtn = $("#chatImage");
   const fileInput = $("#chatFile");
   if (imageBtn && fileInput) {
     imageBtn.addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", async () => {
-      const file = fileInput.files?.[0];
+      const files = fileInput.files;
       fileInput.value = "";
-      if (file) await onPickImage(file);
+      if (files && files.length) await onPickImages(files);
     });
-    setPendingImage(null);
+    clearPendingImages();
   }
 
   $("#chatModel").addEventListener("click", () => onNeedSettings?.());
@@ -418,7 +445,7 @@ export function bindChat({ onNeedSettings } = {}) {
       danger: true,
       onConfirm: () => {
         clearChat();
-        setPendingImage(null);
+        clearPendingImages();
         renderChat();
         toast("对话已清空", "ok");
       },

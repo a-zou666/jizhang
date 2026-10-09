@@ -74,4 +74,16 @@ export async function prepareImage(file) {
   return { dataUrl: full, thumb, mime, name: String(file.name ?? "图片") };
 }
 
+/**
+ * 批量把多个 File 变成可发送的图片对象（每张独立压缩 / 生成缩略图）。
+ * 任何一张不合法都会抛错，由调用方决定是整批失败还是挑出能用的。
+ * @returns {Promise<Array<{dataUrl: string, thumb: string, mime: string, name: string}>>}
+ */
+export async function prepareImages(files) {
+  const list = Array.from(files ?? []);
+  if (!list.length) throw new Error("没有选到图片");
+  const prepared = await Promise.all(list.map((file) => prepareImage(file)));
+  return prepared.filter(Boolean);
+}
+
 export const __testing = { FULL_EDGE, THUMB_EDGE, isImageFile };
