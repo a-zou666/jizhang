@@ -171,6 +171,34 @@ async function gitee(path, { method = "GET", token, body, form } = {}) {
   return json;
 }
 
+/**
+ * 用一次轻量的「我是谁」请求验令牌。
+ *
+ * 必须**先验**再干活：令牌坏掉时 Gitee 有一堆接口会返回
+ * HTTP 404「Not Found Project」（而不是 401），照着这个报错去查，会一路
+ * 往「仓库地址写错了 / 仓库不存在」的方向瞎找，实际原因是令牌失效。
+ * 这里prominently 把「令牌无效」点出来，省掉这段排查。
+ */
+async function verifyToken({ owner, repo, token }) {
+  const url = new URL(`${API}/user`);
+  url.searchParams.set("access_token", token);
+  const response = await fetch(url, { headers: { "User-Agent": "ai-ledger-ci" } });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      detail = (await response.json())?.message ?? "";
+    } catch {
+      /* 非 JSON 就用状态码 */
+    }
+    throw new Error(
+      `GITEE_TOKEN 校验失败（HTTP ${response.status}）：${detail || response.statusText}\n` +
+        "      令牌无效或已过期。请到 Gitee → 设置 → 私人令牌 重新生成，" +
+        "确保勾选 projects 权限，然后更新仓库 Secrets 里的 GITEE_TOKEN。\n" +
+        `      目标仓库：https://gitee.com/${owner}/${repo}`,
+    );
+  }
+}
+
 /** 用 FormData 传一个文件（Node 18+ 原生支持） */
 function fileForm(filePath, extra = {}) {
   const form = new FormData();
@@ -191,10 +219,13 @@ function fileForm(filePath, extra = {}) {
  * 往 Gitee 建 Release 时如果 `target_commitish` 指向一个不存在的分支，
  * 接口会返回 HTTP 404「Not Found Project」——看起来像「仓库不存在」，
  * 其实只是分支名不对，很容易查错方向。
+ *
+ * 另外：带坏令牌请求会 401，而**不带令牌**请求公开仓库是 200。所以这里
+ * 明确不传令牌 —— 公开仓库的默认分支是公开信息，读得到更稳。
  */
-async function defaultBranch({ owner, repo, token }) {
+async function defaultBranch({ owner, repo }) {
   try {
-    const info = await gitee(`/repos/${owner}/${repo}`, { token });
+    const info = await gitee(`/repos/${owner}/${repo}`, {});
     const branch = String(info?.default_branch ?? "").trim();
     if (branch) return branch;
   } catch {
@@ -381,8 +412,12 @@ async function main() {
     return;
   }
 
-  const branch = await defaultBranch({ owner, repo, token });
+  const branch = await defaultBranch({ owner, repo });
   console.log(`[gitee-release] 默认分支：${branch || "（接口未返回，交给 Gitee 决定）"}`);
+
+  // 先验令牌：坏令牌时 Gitee 有一堆接口会回 404「Not Found Project」，
+  // 照那个报错查会一路跑偏，这里直接把「令牌无效」挑明。
+  await verifyToken({ owner, repo, token });
 
   const { id: releaseId, created } = await ensureRelease({
     owner,
