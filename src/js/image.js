@@ -1,16 +1,25 @@
 /**
- * 对话页识图记账：选图 → 压缩 → 生成「送模型的大图」和「气泡里的小缩略图」
+ * 对话页识图记账：选图 → 压缩 → 生成「送模型的大图」「气泡缩略图」「预览图」
  *
  * 只压缩不上传：图片最终以 data URL 形式交给 Rust 端的 process_image，
- * 全程留在本机；消息里只保存缩略图（见 store 的 CHAT_IMAGE_LIMIT），原图不入库。
+ * 全程留在本机；消息里保存缩略图（气泡用）与预览图（点开看大图用），
+ * 送模型的原图不入库 —— 否则 200 条消息能把 localStorage 撑爆。
  */
 
 /** 送模型的最长边：再大也识别不出更多细节，只会白白多花 token */
 const FULL_EDGE = 1280;
 /** 气泡里显示的缩略图最长边 */
 const THUMB_EDGE = 192;
+/**
+ * 点开预览用的中等图最长边。
+ *
+ * 取 720：小票 / 账单截图放大后字还能看清，体积又远小于 1280 的原图
+ * （缩略图只有 192，直接拉大是糊的，没法当预览用）。
+ */
+const VIEW_EDGE = 720;
 const FULL_QUALITY = 0.82;
 const THUMB_QUALITY = 0.6;
+const VIEW_QUALITY = 0.72;
 /** 原图上限：超过就让用户换一张，避免大图把内存和 token 都吃光 */
 export const IMAGE_MAX_BYTES = 12 * 1024 * 1024;
 
@@ -72,7 +81,7 @@ export function snapshotFiles(fileList) {
 
 /**
  * 把一个 File 变成可直接发送的图片对象
- * @returns {Promise<{dataUrl: string, thumb: string, mime: string, name: string}>}
+ * @returns {Promise<{dataUrl: string, thumb: string, view: string, mime: string, name: string}>}
  */
 export async function prepareImage(file) {
   if (!file) throw new Error("没有选到图片");
@@ -86,7 +95,9 @@ export async function prepareImage(file) {
   const mime = String(file.type || "image/jpeg");
   const full = (await reencode(raw, FULL_EDGE, FULL_QUALITY).catch(() => null)) ?? raw;
   const thumb = (await reencode(raw, THUMB_EDGE, THUMB_QUALITY).catch(() => null)) ?? raw;
-  return { dataUrl: full, thumb, mime, name: String(file.name ?? "图片") };
+  // 预览图失败时退回原图：点开能看到比缩略图清楚的内容，比空白强
+  const view = (await reencode(raw, VIEW_EDGE, VIEW_QUALITY).catch(() => null)) ?? full;
+  return { dataUrl: full, thumb, view, mime, name: String(file.name ?? "图片") };
 }
 
 /**
@@ -111,4 +122,4 @@ export async function prepareImages(files) {
   return { images, errors };
 }
 
-export const __testing = { FULL_EDGE, THUMB_EDGE, isImageFile };
+export const __testing = { FULL_EDGE, THUMB_EDGE, VIEW_EDGE, isImageFile };

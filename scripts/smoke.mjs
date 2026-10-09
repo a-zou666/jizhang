@@ -1634,6 +1634,42 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
     fail("带图发送没有渲染缩略图", `bubbles=${bubbles.length} image=${savedUser?.images?.[0]}`);
   } else ok("只发图片也能发：用户气泡显示缩略图，历史里只存小图（原图不入库）");
 
+  // 点开图片看大图：气泡里的缩略图要可点，点了弹出全屏浮层显示「预览图」而不是那张小缩略图。
+  const withView = {
+    dataUrl: "data:image/jpeg;base64,FULL",
+    thumb: "data:image/jpeg;base64,THUMB",
+    view: "data:image/jpeg;base64,VIEW",
+    mime: "image/jpeg",
+  };
+  store.clearChat();
+  await chat.sendMessage("", [withView]);
+  const viewSaved = store.getChat()[0];
+  if (viewSaved?.views?.[0] !== withView.view) {
+    fail("发送时没把预览图存进历史", JSON.stringify(viewSaved?.views));
+  } else ok("发送时同时存下预览图（点开看的是 720px 中图，不是 192px 缩略图）");
+
+  chat.renderChat();
+  const zoomable = list.querySelectorAll(".chat-bubble__image")[0];
+  if (!zoomable || !zoomable.__listeners?.get("click")?.length) {
+    fail("气泡里的图片没有绑定点击（点不开预览）");
+  } else ok("气泡里的图片可点击（点开看大图）");
+
+  // 真的点一下：浮层打开，里面显示的是预览图
+  await zoomable.__listeners.get("click")[0]();
+  const viewer = documentStub.body.querySelector(".image-viewer");
+  const shownImg = viewer?.querySelector(".image-viewer__img");
+  if (!viewer || viewer.hidden) {
+    fail("点图片没有打开预览浮层");
+  } else if (shownImg && shownImg.src !== withView.view) {
+    fail("预览浮层里显示的不是预览图", String(shownImg.src));
+  } else ok("点图片打开全屏预览，显示的是预览图（不是缩略图）");
+
+  // 点遮罩任意处关闭
+  await viewer.__listeners?.get("click")?.[0]?.();
+  if (!viewer.hidden) {
+    fail("点了遮罩预览浮层没关掉");
+  } else ok("点任意处关闭预览");
+
   const reply = list.querySelectorAll(".chat-row")[1]?.textContent ?? "";
   if (!/图片|识图/.test(reply)) {
     fail("带图发送没有走识图分支", reply.slice(0, 120));

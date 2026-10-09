@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { prepareImages, snapshotFiles } from "../src/js/image.js";
+import { prepareImages, snapshotFiles, __testing } from "../src/js/image.js";
 
 /** 造一个「会被清空」的 FileList：行为和浏览器里 input.value = "" 之后一致 */
 function liveFileList(files) {
@@ -60,5 +60,15 @@ describe("prepareImages", () => {
   it("没有文件时明确报错，不静默返回空", async () => {
     await assert.rejects(() => prepareImages([]), /没有选到图片/);
     await assert.rejects(() => prepareImages(null), /没有选到图片/);
+  });
+});
+
+describe("三种尺寸（送模型 / 气泡 / 预览）", () => {
+  it("预览图比缩略图大、比送模型的小，三档互不相同", () => {
+    const { FULL_EDGE, THUMB_EDGE, VIEW_EDGE } = __testing;
+    // 缩略图只够放在气泡里，点开预览必须更大才看得清小票上的字
+    assert.ok(VIEW_EDGE > THUMB_EDGE, `预览(${VIEW_EDGE}) 应大于缩略图(${THUMB_EDGE})`);
+    // 预览图没必要跟送模型的一样大，省 localStorage
+    assert.ok(VIEW_EDGE <= FULL_EDGE, `预览(${VIEW_EDGE}) 不该超过送模型的(${FULL_EDGE})`);
   });
 });

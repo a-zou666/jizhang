@@ -2849,6 +2849,152 @@ a {
   border: 1px solid var(--glass-hairline);
 }
 
+/* 能点开看大图的那几张：给一点「可点」的暗示 */
+.chat-bubble__image.is-zoomable {
+  cursor: zoom-in;
+  transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
+}
+
+.chat-bubble__image.is-zoomable:active {
+  transform: scale(0.97);
+  opacity: 0.88;
+}
+
+/* ============ 图片预览（全屏浮层） ============ */
+/* 独立于模态弹窗那套：看大图要的是纯黑底 + 图片居中，且点任意处关闭 */
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(8, 12, 20, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: zoom-out;
+  animation: image-viewer-in var(--duration-base) var(--ease-out);
+}
+
+.image-viewer[hidden] {
+  display: none;
+}
+
+.image-viewer__img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  /* 图是自己点的，别让它跟着遮罩一起关掉 */
+  cursor: default;
+  animation: image-viewer-img-in var(--duration-base) var(--ease-out);
+}
+
+.image-viewer__close {
+  position: absolute;
+  top: calc(var(--space-4) + var(--safe-area-top));
+  right: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.image-viewer__close:active {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* 左右切换：只在多张时才显示 */
+.image-viewer__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.image-viewer__nav[hidden] {
+  display: none;
+}
+
+.image-viewer__nav:active {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.image-viewer__nav.is-prev {
+  left: var(--space-3);
+}
+
+.image-viewer__nav.is-next {
+  right: var(--space-3);
+}
+
+.image-viewer__counter {
+  position: absolute;
+  bottom: calc(var(--space-5) + var(--safe-area-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 0.75rem;
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-full);
+}
+
+.image-viewer__counter[hidden] {
+  display: none;
+}
+
+@keyframes image-viewer-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes image-viewer-img-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-viewer,
+  .image-viewer__img {
+    animation: none;
+  }
+}
+
 .chat-composer__input {
   flex: 1;
   min-height: 2.5rem;

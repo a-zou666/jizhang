@@ -5,6 +5,7 @@ import { openConfirm } from "./confirm.js";
 import { icon } from "./icons.js";
 import { prepareImages, snapshotFiles } from "./image.js";
 import { openModelPicker } from "./models.js";
+import { isPreviewable, bindPreviewKeys, openPreview } from "./preview.js";
 import {
   addRecords,
   appendChat,
@@ -174,13 +175,21 @@ function bubbleFor(message) {
   if (message.images?.length) {
     const gallery = document.createElement("div");
     gallery.classList.add("chat-bubble__images");
-    for (const src of message.images) {
+    // 预览图与缩略图按下标配对（views[i] ↔ images[i]）；没有预览图的位置退回缩略图，
+    // 老消息（升级前发的，压根没有 views）也照样能点开看。
+    const views = message.images.map((thumb, i) => message.views?.[i] || thumb);
+    message.images.forEach((src, index) => {
       const image = document.createElement("img");
       image.classList.add("chat-bubble__image");
       image.src = src;
       image.alt = "上传的图片";
+      if (isPreviewable(views[index])) {
+        image.classList.add("is-zoomable");
+        image.title = "点击查看大图";
+        image.addEventListener("click", () => openPreview(views, index));
+      }
       gallery.append(image);
-    }
+    });
     body.append(gallery);
   }
 
@@ -332,7 +341,9 @@ export async function sendMessage(raw, images = pendingImages) {
     kind: "text",
     state: "done",
     at: Date.now(),
+    // 缩略图用于气泡显示，预览图用于点开看大图（两者按下标配对）
     images: (images ?? []).map((item) => item.thumb).filter(Boolean),
+    views: (images ?? []).map((item) => item.view ?? ""),
   });
   const thinking = appendChat({
     role: "assistant",
@@ -453,6 +464,9 @@ export function bindChat({ onNeedSettings } = {}) {
     });
     clearPendingImages();
   }
+
+  // 图片预览：Esc 关闭、左右键切换（浮层只在点图后才创建，这里先注册键盘）
+  bindPreviewKeys();
 
   // 顶部胶囊 = 选择这次用哪个模型（模型池在设置 → 模型管理里维护）
   $("#chatModel").addEventListener("click", () => openModelPicker({ onManage: () => onNeedSettings?.() }));

@@ -227,6 +227,72 @@ describe("对话里的图片（识图记账）", () => {
     assert.equal(mod.getChat()[2].images.length, 0);
   });
 
+  it("预览图与缩略图按下标配对（点开看大图用）", () => {
+    mod.clearChat();
+    const view = "data:image/jpeg;base64,VIEW";
+    mod.appendChat({
+      role: "user",
+      text: "两张",
+      kind: "text",
+      state: "done",
+      images: [`${thumb}A`, `${thumb}B`],
+      views: [view, ""],
+    });
+    const message = mod.getChat()[0];
+    assert.equal(message.images.length, 2);
+    assert.equal(message.views.length, 2);
+    assert.equal(message.views[0], view);
+    // 缺预览图的位置留空串，渲染时退回缩略图，不硬补成 undefined
+    assert.equal(message.views[1], "");
+  });
+
+  it("预览图过大或不是图片时丢弃，长度与缩略图对齐", () => {
+    mod.clearChat();
+    mod.appendChat({
+      role: "user",
+      text: "混合",
+      kind: "text",
+      state: "done",
+      images: [`${thumb}A`, `${thumb}B`, `${thumb}C`],
+      views: [
+        "data:image/jpeg;base64,OK",
+        `data:image/png;base64,${"A".repeat(200_000)}`,
+        "javascript:alert(1)",
+      ],
+    });
+    const message = mod.getChat()[0];
+    // 长度永远跟 images 一样，坏值落成空串而不是被删掉（否则下标就错位了）
+    assert.equal(message.views.length, 3);
+    assert.equal(message.views[0], "data:image/jpeg;base64,OK");
+    assert.equal(message.views[1], "");
+    assert.equal(message.views[2], "");
+  });
+
+  it("老消息没有 views 字段也不会崩（升级前的历史）", () => {
+    mod.clearChat();
+    mod.appendChat({ role: "user", text: "旧消息", kind: "text", state: "done", images: [thumb] });
+    assert.deepEqual(mod.getChat()[0].views, []);
+  });
+
+  it("清理旧消息图片时，预览图一起清掉", () => {
+    mod.clearChat();
+    const view = "data:image/jpeg;base64,VIEW";
+    for (let i = 0; i < 35; i += 1) {
+      mod.appendChat({
+        role: "user",
+        text: `第 ${i} 条`,
+        kind: "text",
+        state: "done",
+        images: [thumb],
+        views: [view],
+      });
+    }
+    const chat = mod.getChat();
+    assert.equal(chat[0].images.length, 0);
+    assert.equal(chat[0].views.length, 0);
+    assert.equal(chat.at(-1).views[0], view);
+  });
+
   it("缩略图只保留最近若干条，更早的消息文字照旧", () => {
     mod.clearChat();
     for (let i = 0; i < 40; i += 1) {

@@ -352,10 +352,12 @@ function sanitizeModels(raw) {
 /* ---------------- 对话页消息流 ---------------- */
 const CHAT_LIMIT = 200;
 /**
- * 消息里的图片只存缩略图（气泡显示用），且限制体积：
+ * 消息里的图片只存缩略图（气泡显示用）与预览图（点开看大图用），且限制体积：
  * 原图可能有几百 KB，200 条消息全存下来会直接把 localStorage 撑爆。
  */
 export const CHAT_IMAGE_LIMIT = 40_000;
+/** 预览图比缩略图大，单独给一个上限（超过就退回用缩略图预览，聊胜于无） */
+export const CHAT_VIEW_LIMIT = 160_000;
 /** 缩略图只保留最近若干条：更早的消息清掉图片、文字照旧留着 */
 const CHAT_IMAGE_KEEP = 30;
 /** 单条消息最多保留多少张缩略图（多张小票也能存，但别太离谱） */
@@ -367,6 +369,23 @@ function sanitizeChatImage(raw) {
   return raw.length > CHAT_IMAGE_LIMIT ? "" : raw;
 }
 
+/**
+ * 预览图：必须**与同位置的缩略图配对**才保留。
+ *
+ * 用下标与 images 对齐（images[i] 对应 views[i]），这样渲染时不必再猜
+ * 哪张对应哪张；缺预览图的位置留空串，界面会自动退回缩略图。
+ */
+function sanitizeChatViews(raw, count) {
+  if (!Array.isArray(raw) || !count) return [];
+  const out = [];
+  for (let index = 0; index < count; index += 1) {
+    const value = raw[index];
+    const ok = typeof value === "string" && value.startsWith("data:image/") && value.length <= CHAT_VIEW_LIMIT;
+    out.push(ok ? value : "");
+  }
+  return out;
+}
+
 /** 从后往前数，超过 CHAT_IMAGE_KEEP 条带图的消息就把它的图片清空（文字保留） */
 function pruneChatImages(messages) {
   let seen = 0;
@@ -374,7 +393,7 @@ function pruneChatImages(messages) {
   for (let index = out.length - 1; index >= 0; index -= 1) {
     if (!out[index].images?.length) continue;
     seen += 1;
-    if (seen > CHAT_IMAGE_KEEP) out[index] = { ...out[index], images: [] };
+    if (seen > CHAT_IMAGE_KEEP) out[index] = { ...out[index], images: [], views: [] };
   }
   return out;
 }
@@ -402,6 +421,8 @@ function sanitizeChatMessage(raw) {
     .map(sanitizeChatImage)
     .filter(Boolean)
     .slice(0, MAX_CHAT_IMAGES);
+  // 预览图与缩略图按下标配对：images[i] ↔ views[i]，缺失的位置留空串
+  const views = sanitizeChatViews(raw.views, images.length);
   return {
     id: String(raw.id ?? uid()),
     role,
@@ -411,6 +432,7 @@ function sanitizeChatMessage(raw) {
     state: ["pending", "done", "ignored", "error"].includes(raw.state) ? raw.state : "done",
     at: Number.isFinite(Number(raw.at)) ? Number(raw.at) : Date.now(),
     images,
+    views,
   };
 }
 
