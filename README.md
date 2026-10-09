@@ -51,6 +51,17 @@
 
 Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://github.com/a-zou666/jizhang/releases)，push 到 `main` 即触发。
 
+构建完成后会用仓库 Secrets 里的 upload keystore 对 APK 签名（`zipalign` → `apksigner`，见 `scripts/sign-android-apk.mjs`），
+所以 Release 里的包可以直接安装（未签名的 APK 系统是不让装的）。下载时按机型选：
+
+| 机型 | 文件 |
+| --- | --- |
+| 现代手机（arm64） | `app-arm64-release.apk` |
+| 老设备（armeabi-v7a） | `app-arm-release.apk` |
+
+首次安装需在系统设置里允许「安装未知来源应用」。升级安装必须用同一个签名的包，否则会提示「应用未安装」，
+需要先卸载旧版本 —— 这会清掉本机账目，**升级前建议先在设置里导出备份**。
+
 ## 模型管理（App 内设置页）
 
 设置页 → **模型管理**：

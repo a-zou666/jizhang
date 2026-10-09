@@ -68,14 +68,26 @@ jobs:
 
       # 只打手机真正需要的两种 ABI（x86 / x86_64 是模拟器用的，白占 16MB），
       # 并按 ABI 拆包，这样 arm64 手机只下 9MB 左右的那一个
-      - name: Build APK per ABI (Unsigned)
+      - name: Build APK per ABI
         run: npm run tauri android build -- --apk --split-per-abi --target aarch64 armv7
+
+      # Tauri 生成的 app/build.gradle.kts 里没有 signingConfigs，release 变体没有签名配置，
+      # 所以上面这一步只会产出 app-<abi>-release-unsigned.apk。
+      # 这里用仓库 Secrets 里的 upload keystore 对产物签名（zipalign + apksigner），
+      # 签完把 -unsigned 从文件名里去掉；没配 Secrets 时脚本会跳过并保持未签名。
+      - name: Sign APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: node scripts/sign-android-apk.mjs
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: jizhang-android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*-release-unsigned.apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*-release.apk
           if-no-files-found: error
 
       - name: Publish APK to GitHub Release
@@ -83,6 +95,14 @@ jobs:
         with:
           tag_name: android-v${{ steps.pkg.outputs.version }}-${{ github.run_number }}
           name: Android v${{ steps.pkg.outputs.version }} (#${{ github.run_number }})
+          body: |
+            未签名的 APK 无法安装，请下载本页附件中的 APK（已用 upload keystore 签名）。
+
+            - 现代手机（arm64）选 `app-arm64-release.apk`
+            - 老设备（armeabi-v7a）选 `app-arm-release.apk`
+
+            首次安装需在系统设置里允许「安装未知来源应用」。升级安装必须用同一签名的包，
+            否则会提示「应用未安装」，需先卸载旧版本（会清掉本地账目，建议先导出备份）。
           generate_release_notes: true
           files: |
-            src-tauri/gen/android/app/build/outputs/apk/**/*-release-unsigned.apk
+            src-tauri/gen/android/app/build/outputs/apk/**/*-release.apk
