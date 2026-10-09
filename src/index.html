@@ -199,6 +199,24 @@
               </div>
             </div>
 
+            <div class="settings-section" data-section="update">
+              <header class="settings-section__head">
+                <span class="settings-section__bar" aria-hidden="true"></span>
+                <div class="settings-section__title">
+                  <p class="settings-group-label">关于</p>
+                  <p class="settings-section__desc">新版本从 Gitee 获取，国内可直接下载</p>
+                </div>
+              </header>
+              <div class="settings-group settings-group--glass">
+                <button class="settings-row is-button" id="rowUpdate" type="button">
+                  <span class="settings-row__icon" data-icon="refresh" aria-hidden="true"></span>
+                  <span class="settings-row__label">软件更新</span>
+                  <span class="settings-row__value" id="updateValue"></span>
+                  <span class="settings-row__chevron" data-icon="chevronRight" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+
             <!-- 版本号由 renderSettings() 从 package.json 注入，别在这里写死 -->
             <p class="app-version" id="appVersion">App</p>
           </div>

@@ -26,6 +26,11 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # 异步运行时
 tokio = { version = "1.0", features = ["macros", "rt"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# 软件更新要用系统浏览器打开 APK 下载地址。
+# 必须用这个插件而不是自己 spawn 进程：Android 沙箱里没有可执行的浏览器进程，
+# 只能通过系统 Intent 打开 URL，opener 正是这么做的（官方维护）。
+# 注意不要用 shell 插件的 open：它在 Android 上会报 Scoped shell IO error。
+tauri-plugin-opener = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

@@ -30,6 +30,95 @@ export const APP_VERSION = (() => {
 
 export const DEFAULT_CATEGORIES = ["餐饮", "交通", "数码", "日用", "娱乐", "其他"];
 
+/* ==========================================================================
+   软件更新源
+   ========================================================================== */
+
+/**
+ * 更新源仓库坐标。**全项目更新源的唯一真相**（Rust 侧 update.rs 有同一份常量，
+ * 那一边负责实际拉清单；这里这份用于「打开浏览器兜底」与展示，两边必须一致）。
+ *
+ * 为什么是 Gitee 不是 GitHub：GitHub 国内常连不上，更新链路走 GitHub 等于永远更新不了。
+ * CI 仍在 GitHub Actions 上打包签名，但产物推送到 Gitee，App 只跟 Gitee 说话。
+ */
+export const GITEE_OWNER = "yykzz";
+export const GITEE_REPO = "jizhang";
+export const UPDATE_RELEASES_PAGE = `https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases`;
+
+/**
+ * 比较两个版本号。返回 true 表示 `remote` 比 `current` 新。
+ *
+ * 与 Rust 侧 update.rs 的 compare_versions 保持同一套规则：
+ * 数字段逐个比，段数不同时缺的补 0；预发布版（-beta）小于同号正式版。
+ * 两边各一份是刻意的 —— 前端要在「没有后端」时也能给出结论，且这段是纯逻辑可单测。
+ */
+export function isNewerVersion(remote, current) {
+  const parse = (raw) => {
+    const text = String(raw ?? "").trim().replace(/^[vV]/, "");
+    const dash = text.indexOf("-");
+    const core = dash >= 0 ? text.slice(0, dash) : text;
+    const pre = dash >= 0 && text.slice(dash + 1).trim().length > 0;
+    const numbers = core.split(/[._+]/).map((part) => {
+      const digits = part.match(/^\d+/);
+      return digits ? Number(digits[0]) : 0;
+    });
+    return { numbers, pre };
+  };
+
+  const left = parse(remote);
+  const right = parse(current);
+  const len = Math.max(left.numbers.length, right.numbers.length);
+  for (let i = 0; i < len; i += 1) {
+    const a = left.numbers[i] ?? 0;
+    const b = right.numbers[i] ?? 0;
+    if (a !== b) return a > b;
+  }
+  // 数字段相同：预发布版 < 正式版
+  if (left.pre && !right.pre) return false;
+  if (!left.pre && right.pre) return true;
+  return false;
+}
+
+/**
+ * 把「检查更新」的返回整理成前端直接可用的一份结果。
+ *
+ * 后端返回的 ok=false 与「invoke 抛异常」在这里统一成同一种形状，
+ * 调用方只需要看 `failed` 一个字段，不用分别处理两条错误路径。
+ */
+export function normalizeUpdateResult(raw, fallbackVersion) {
+  const current = String(raw?.currentVersion ?? fallbackVersion ?? APP_VERSION);
+  const latest = String(raw?.latestVersion ?? "").trim();
+  const failed = !raw?.ok;
+  return {
+    failed,
+    hasUpdate: Boolean(raw?.hasUpdate),
+    currentVersion: current,
+    latestVersion: latest,
+    notes: String(raw?.notes ?? "").trim(),
+    downloadUrl: String(raw?.downloadUrl ?? "").trim(),
+    pageUrl: String(raw?.pageUrl ?? "").trim() || UPDATE_RELEASES_PAGE,
+    message: String(raw?.message ?? "").trim(),
+    hint: String(raw?.hint ?? "").trim(),
+  };
+}
+
+/** 更新说明里可能带 markdown 列表，转成纯文本行，方便直接塞进弹窗 */
+export function cleanReleaseNotes(notes) {
+  return String(notes ?? "")
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^\s*[-*+]\s+/, "· ")
+        .replace(/^\s*#{1,6}\s+/, "")
+        .replace(/\*\*(.+?)\*\*/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+        .trim(),
+    )
+    .filter(Boolean)
+    .slice(0, 12)
+    .join("\n");
+}
+
 /** 协议预设：切换协议类型时套用默认 Base URL */
 export const PROTOCOL_PRESETS = {
   claude: {

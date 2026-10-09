@@ -90,6 +90,20 @@ jobs:
           path: src-tauri/gen/android/app/build/outputs/apk/**/*-release.apk
           if-no-files-found: error
 
+      # 更新链路必须走 Gitee：GitHub 国内经常连不上，走 GitHub 等于「永远更新不了」。
+      # 这里把已签名的 APK 与 latest.json 推到 Gitee 的固定 tag（默认 latest），
+      # App 端只认 Gitee 的固定地址，不用跟着版本号改代码。
+      # 没配 GITEE_TOKEN 时脚本会跳过（CI 不红），只是这次不推 Gitee。
+      - name: Publish APK + manifest to Gitee Release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: ${{ secrets.GITEE_OWNER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          RELEASE_NOTES: |
+            Android v${{ steps.pkg.outputs.version }}（构建 #${{ github.run_number }}）
+            仓库：${{ github.repository }}
+        run: node scripts/publish-gitee-release.mjs
+
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -100,6 +114,9 @@ jobs:
 
             - 现代手机（arm64）选 `app-arm64-release.apk`
             - 老设备（armeabi-v7a）选 `app-arm-release.apk`
+
+            > App 内的「软件更新」从 Gitee 拉取，**不需要翻墙**。
+            > 本页只是镜像，仅在没有 Gitee 环境时作备用。
 
             首次安装需在系统设置里允许「安装未知来源应用」。升级安装必须用同一签名的包，
             否则会提示「应用未安装」，需先卸载旧版本（会清掉本地账目，建议先导出备份）。

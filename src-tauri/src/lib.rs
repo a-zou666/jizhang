@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::command;
 
+mod update;
+use update::UpdateCheckResult;
+
 /// 一条记账记录（字段与前端 `src/js/store.js` 的记录结构对齐）
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Expense {
@@ -855,15 +858,91 @@ async fn list_models(protocol: String, base_url: String, api_key: String) -> Res
     })
 }
 
+/* ==========================================================================
+   软件更新
+   ========================================================================== */
+
+/// 检查 Gitee 上有没有新版本。
+///
+/// 返回 Ok 的形状永远一致（用 `ok` 字段表示成败），前端不必把网络故障
+/// 当成 invoke 异常来 catch；失败时额外给一句能照着做的 `hint`。
+///
+/// `current_version` 由前端传入（版本号的单一来源是 package.json，
+/// 经 Vite 注入前端）—— 后端不重复维护一份版本号，避免两边对不上。
+#[command]
+async fn check_update(current_version: String) -> Result<UpdateCheckResult, String> {
+    let current = current_version.trim();
+    // 开发环境（未构建）拿不到注入版本号，退化成 dev；这时不该报「有新版本」
+    let current = if current.is_empty() { "0.0.0-dev" } else { current };
+
+    let manifest = match update::fetch_manifest(update::MANIFEST_URL).await {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            return Ok(UpdateCheckResult::failure(
+                current,
+                error,
+                format!(
+                    "更新源在 Gitee（{}），不需要翻墙；如果一直失败，可以到发布页手动下载：{}",
+                    update::MANIFEST_URL,
+                    update::RELEASES_PAGE
+                ),
+            ));
+        }
+    };
+
+    let latest = manifest.version.trim();
+    if latest.is_empty() {
+        return Ok(UpdateCheckResult::failure(
+            current,
+            "更新清单里没有版本号".into(),
+            "可能是发布流程出了问题，请到发布页手动看看".into(),
+        ));
+    }
+
+    let has_update = update::is_newer(latest, current);
+    let download_url = if has_update {
+        manifest.download_url_for(update::current_arch())
+    } else {
+        String::new()
+    };
+    let page_url = if manifest.page_url.trim().is_empty() {
+        update::releases_page()
+    } else {
+        manifest.page_url.trim().to_string()
+    };
+
+    Ok(UpdateCheckResult {
+        ok: true,
+        message: if has_update {
+            format!("发现新版本 {}", latest)
+        } else {
+            format!("已是最新版本 {}", current)
+        },
+        latest_version: latest.to_string(),
+        current_version: current.to_string(),
+        has_update,
+        notes: manifest.notes.trim().to_string(),
+        download_url,
+        page_url,
+        hint: String::new(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 打开浏览器跳转到下载地址。用官方 opener 插件而不是自己 spawn 进程：
+        // Android 上没有可以 spawn 的浏览器进程（沙箱不允许），必须走系统 Intent；
+        // opener 在 Android 上正是通过 Intent 打开 URL 的，且是官方维护。
+        // 注意 shell 插件的 open 在 Android 上会报 Scoped shell IO error，别用。
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             process_accounting,
             process_intent,
             process_image,
             test_connection,
-            list_models
+            list_models,
+            check_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

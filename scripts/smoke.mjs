@@ -295,6 +295,7 @@ const frontSources = readdirSync(resolve(ROOT, "src/js"))
   .join("\n");
 const bridgeSource = readFileSync(resolve(ROOT, "src/js/bridge.js"), "utf8");
 const indexSource = readFileSync(resolve(ROOT, "src/index.html"), "utf8");
+const settingsSource = readFileSync(resolve(ROOT, "src/js/settings.js"), "utf8");
 
 if (/SpeechRecognition|webkitSpeechRecognition|MediaRecorder|navigator\.mediaDevices/.test(frontSources)) {
   fail("前端模块仍残留语音引擎相关代码（已下线）");
@@ -1758,6 +1759,17 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   if (!indexSource.includes('id="rowImport"') || !/id="rowExport"/.test(indexSource)) {
     fail("设置页缺少数据导入 / 导出入口");
   } else ok("设置页「数据」区同时有导出与导入两个入口");
+
+  // 软件更新入口：必须存在，且绑定的处理函数要真的接上（光有 HTML 不算）
+  if (!/id="rowUpdate"/.test(indexSource)) {
+    fail("设置页缺少「软件更新」入口");
+  } else if (!/rowUpdate["']\s*\)\s*\.addEventListener/.test(settingsSource)) {
+    fail("「软件更新」入口没有绑定点击事件，点了不会有反应");
+  } else if (!/from\s+["'][^"']*update\.js["']/.test(settingsSource)) {
+    fail("settings.js 没有引入 update.js，更新逻辑接不上");
+  } else {
+    ok("设置页有「软件更新」入口，并已绑定到 update.js");
+  }
 
   store.replaceAll({ records: [], settings: {} });
 }

@@ -201,6 +201,63 @@ export async function testConnection(settings) {
   }
 }
 
+/* ---------------- 软件更新 ---------------- */
+
+/**
+ * 检查 Gitee 上有没有新版本。
+ *
+ * 返回形状固定为 `{ok, message, latestVersion, currentVersion, hasUpdate, notes,
+ * downloadUrl, pageUrl, hint}`；网络失败也走 ok:false 而不是抛异常，
+ * 调用方不用把它当成错误提醒（「检查更新失败」不该弹报错打断用户）。
+ *
+ * 超时给 20s：清单只有几百字节，慢到 20s 说明网络确实有问题，早点让用户知道。
+ * @returns {Promise<{ok:boolean, message:string, latestVersion:string,
+ *   currentVersion:string, hasUpdate:boolean, notes:string, downloadUrl:string,
+ *   pageUrl:string, hint:string}>}
+ */
+export async function checkUpdate(currentVersion) {
+  if (!hasBackend()) {
+    return {
+      ok: false,
+      message: "当前环境不支持检查更新",
+      latestVersion: "",
+      currentVersion: String(currentVersion ?? ""),
+      hasUpdate: false,
+      notes: "",
+      downloadUrl: "",
+      pageUrl: "",
+      hint: "请用打包后的 App 检查更新",
+    };
+  }
+
+  try {
+    const result = await withTimeout(invoke("check_update", { currentVersion }), 25000);
+    return {
+      ok: Boolean(result?.ok),
+      message: String(result?.message ?? ""),
+      latestVersion: String(result?.latestVersion ?? ""),
+      currentVersion: String(result?.currentVersion ?? currentVersion ?? ""),
+      hasUpdate: Boolean(result?.hasUpdate),
+      notes: String(result?.notes ?? ""),
+      downloadUrl: String(result?.downloadUrl ?? ""),
+      pageUrl: String(result?.pageUrl ?? ""),
+      hint: String(result?.hint ?? ""),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error?.message === "请求超时" ? "检查更新超时，网络可能不稳定" : String(error?.message ?? error),
+      latestVersion: "",
+      currentVersion: String(currentVersion ?? ""),
+      hasUpdate: false,
+      notes: "",
+      downloadUrl: "",
+      pageUrl: "",
+      hint: "",
+    };
+  }
+}
+
 /**
  * 从兼容协议 `/v1/models` 拉取可用模型列表。
  *

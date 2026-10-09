@@ -3,6 +3,7 @@
 import { testConnection } from "./bridge.js";
 import { hydrateIcons } from "./icons.js";
 import { openModelManager } from "./models.js";
+import { openUpdatePanel } from "./update.js";
 import {
   addCategory,
   APP_VERSION,
@@ -115,6 +116,9 @@ export function bindSettings() {
   /* 数据导出 / 导入 */
   $("#rowExport").addEventListener("click", exportData);
   $("#rowImport").addEventListener("click", importData);
+
+  /* 软件更新：结果由 update.js 弹窗呈现，这里只负责触发 */
+  $("#rowUpdate").addEventListener("click", openUpdatePanel);
 
   /* 清空账单 */
   $("#rowClear").addEventListener("click", () => {

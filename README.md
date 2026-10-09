@@ -62,6 +62,27 @@ Android APK 由 GitHub Actions 自动构建并发布到 [Releases](https://githu
 首次安装需在系统设置里允许「安装未知来源应用」。升级安装必须用同一个签名的包，否则会提示「应用未安装」，
 需要先卸载旧版本 —— 这会清掉本机账目，**升级前建议先在设置里导出备份**。
 
+### App 内更新（走 Gitee，不需要翻墙）
+
+设置页 → **软件更新**：App 会去 Gitee 读版本清单，有新版就弹出「版本号 + 更新说明」，点**立即下载**用系统浏览器
+打开 APK 直链，浏览器自动开始下载，下完点一下即可安装。
+
+更新源固定在 Gitee 的 [yykzz/jizhang](https://gitee.com/yykzz/jizhang)：
+
+| 用途 | 地址 |
+| --- | --- |
+| 版本清单 | `https://gitee.com/yykzz/jizhang/releases/download/latest/latest.json` |
+| APK 直链 | `https://gitee.com/yykzz/jizhang/releases/download/latest/app-arm64-release.apk` |
+| 发布页（手动兜底） | https://gitee.com/yykzz/jizhang/releases |
+
+用固定的 `latest` tag 承载「当前最新版」，每次发布**覆盖同一 Release 的附件**，所以 App 里的清单地址和 APK 直链
+永远不变。CI 在打完包、签完名之后会自动跑 `scripts/publish-gitee-release.mjs`：创建 / 复用 `latest` Release
+→ 上传签名 APK 和 `latest.json`（需要仓库 Secrets 里的 `GITEE_TOKEN`，没有就跳过，不影响 GitHub 这边的发布）。
+
+> 为什么不在 App 内直接下载并静默安装：Android 7+ 安装 APK 必须走 FileProvider 生成 `content://` URI 再发
+> `ACTION_VIEW` Intent，而 Tauri 2 的 Rust 侧拿不到 Activity / JNIEnv，官方也没有对应插件；强行 JNI 调用容易
+> 直接 JVM crash。交给系统浏览器是最稳的一条路。相关取舍写在 `src-tauri/src/update.rs` 开头。
+
 ## 模型管理（App 内设置页）
 
 设置页 → **模型管理**：

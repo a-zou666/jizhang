@@ -251,3 +251,101 @@ describe("对话里的图片（识图记账）", () => {
     assert.equal(mod.getRecords().length, 1);
   });
 });
+
+describe("软件更新（纯逻辑）", () => {
+  it("版本号比较：常规递进", () => {
+    assert.equal(mod.isNewerVersion("0.1.1", "0.1.0"), true);
+    assert.equal(mod.isNewerVersion("v0.1.1", "0.1.0"), true);
+    assert.equal(mod.isNewerVersion("0.1.0", "0.1.0"), false);
+    assert.equal(mod.isNewerVersion("0.0.9", "0.1.0"), false);
+    // 段数不同按补 0 处理
+    assert.equal(mod.isNewerVersion("0.10", "0.9.9"), true);
+    assert.equal(mod.isNewerVersion("0.1", "0.1.0"), false);
+    assert.equal(mod.isNewerVersion("1.0", "0.99.99"), true);
+  });
+
+  it("版本号比较：预发布小于同号正式版", () => {
+    assert.equal(mod.isNewerVersion("0.2.0-beta", "0.2.0"), false);
+    assert.equal(mod.isNewerVersion("0.2.0", "0.2.0-beta"), true);
+    assert.equal(mod.isNewerVersion("0.2.0-beta", "0.2.0-beta.2"), false);
+  });
+
+  it("版本号比较：空值与异常输入不炸", () => {
+    assert.equal(mod.isNewerVersion("", "0.1.0"), false);
+    assert.equal(mod.isNewerVersion(null, "0.1.0"), false);
+    assert.equal(mod.isNewerVersion("abc", "0.1.0"), false);
+    assert.equal(mod.isNewerVersion("0.0.0-dev", "0.0.0-dev"), false);
+  });
+
+  it("更新源常量指向 Gitee（不能退回 GitHub）", () => {
+    assert.match(mod.UPDATE_RELEASES_PAGE, /^https:\/\/gitee\.com\//);
+    assert.equal(mod.GITEE_OWNER, "yykzz");
+    assert.equal(mod.GITEE_REPO, "jizhang");
+    assert.ok(!mod.UPDATE_RELEASES_PAGE.includes("github.com"));
+  });
+
+  it("归一化检查结果：成功且有更新", () => {
+    const result = mod.normalizeUpdateResult(
+      {
+        ok: true,
+        hasUpdate: true,
+        latestVersion: "0.2.0",
+        currentVersion: "0.1.0",
+        notes: "- 修了个 bug",
+        downloadUrl: "https://gitee.com/x/y/releases/download/latest/a.apk",
+        pageUrl: "https://gitee.com/x/y/releases",
+        message: "发现新版本 0.2.0",
+      },
+      "0.1.0",
+    );
+    assert.equal(result.failed, false);
+    assert.equal(result.hasUpdate, true);
+    assert.equal(result.latestVersion, "0.2.0");
+    assert.equal(result.downloadUrl.endsWith("a.apk"), true);
+  });
+
+  it("归一化检查结果：失败时兜底到发布页", () => {
+    const result = mod.normalizeUpdateResult({ ok: false, message: "连不上" }, "0.1.0");
+    assert.equal(result.failed, true);
+    assert.equal(result.hasUpdate, false);
+    assert.equal(result.currentVersion, "0.1.0");
+    assert.equal(result.pageUrl, mod.UPDATE_RELEASES_PAGE);
+    assert.equal(result.message, "连不上");
+  });
+
+  it("归一化检查结果：完全空的返回也不炸", () => {
+    const result = mod.normalizeUpdateResult(undefined, "0.1.0");
+    assert.equal(result.failed, true);
+    assert.equal(result.currentVersion, "0.1.0");
+    assert.equal(result.latestVersion, "");
+  });
+
+  it("更新说明清洗：markdown 转纯文本且限行", () => {
+    const notes = mod.cleanReleaseNotes(
+      [
+        "# 更新",
+        "- 修了个 bug",
+        "* 加了新功能",
+        "**加粗**文本",
+        "`代码`样式",
+        "1. 有序项",
+        "",
+        "   ",
+      ].join("\n"),
+    );
+    const lines = notes.split("\n");
+    assert.equal(lines[0], "更新");
+    assert.equal(lines[1], "· 修了个 bug");
+    assert.equal(lines[2], "· 加了新功能");
+    assert.equal(lines[3], "加粗文本");
+    assert.equal(lines[4], "代码样式");
+    // 空行被剔除
+    assert.equal(lines.includes(""), false);
+  });
+
+  it("更新说明清洗：空输入返回空串", () => {
+    assert.equal(mod.cleanReleaseNotes(null), "");
+    assert.equal(mod.cleanReleaseNotes(undefined), "");
+    assert.equal(mod.cleanReleaseNotes("   "), "");
+  });
+});
