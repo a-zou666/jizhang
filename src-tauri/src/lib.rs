@@ -766,7 +766,16 @@ fn models_endpoint(protocol: &str, base_url: &str) -> String {
     }
 }
 
-/// 从 `/v1/models` 接口拉取可用模型列表（OpenAI 兼容协议）
+/// 从 `/v1/models` 接口拉取可用模型列表。
+///
+/// ## 鉴权头必须按协议区分（踩过一次）
+///
+/// 这里曾经不管什么协议都发 `Authorization: Bearer <key>`，于是选「Claude 原生」
+/// 的服务商（MiniMax /anthropic、Anthropic 官方等）**永远拉不到模型** ——
+/// 它们只认 `x-api-key`，收不到就回：
+///   `login fail; Please carry the API secret key in the 'X-Api-Key' field`
+/// 而正常对话（`request_model`）是分协议的，于是出现「能聊天、却拉不出模型」的错乱现象。
+/// 现在两边用同一套规则：claude → `x-api-key`，其余 → `Authorization: Bearer`。
 #[command]
 async fn list_models(protocol: String, base_url: String, api_key: String) -> Result<ModelsResult, String> {
     let protocol = normalize_protocol(&protocol);
@@ -782,10 +791,17 @@ async fn list_models(protocol: String, base_url: String, api_key: String) -> Res
     let url = models_endpoint(protocol, &base_url);
     let http = client()?;
 
-    let response = http
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("anthropic-version", ANTHROPIC_VERSION) // Anthropic 忽略，多写无害
+    let request = if protocol == "claude" {
+        http.get(&url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", ANTHROPIC_VERSION)
+    } else {
+        http.get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("anthropic-version", ANTHROPIC_VERSION) // Anthropic 忽略，多写无害
+    };
+
+    let response = request
         .send()
         .await
         .map_err(|e| format!("网络请求失败: {}", e))?;

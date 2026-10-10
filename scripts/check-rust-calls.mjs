@@ -187,6 +187,66 @@ function main() {
     process.exit(1);
   }
   console.log(`  ✓ Rust 调用参数自洽：${functions} 个函数 / ${calls} 处调用全部对齐`);
+
+  checkAuthHeaderByProtocol(files);
+}
+
+/**
+ * 鉴权头必须按协议区分。
+ *
+ * 拿真实事故换来的检查：`list_models` 曾经不管什么协议都发 `Authorization: Bearer`，
+ * 于是选「Claude 原生」的服务商（MiniMax /anthropic 等）**永远拉不到模型** ——
+ * 它们只认 `x-api-key`。而正常对话是分协议的，表现为「能聊天、却拉不出模型」，
+ * 很难往"拉模型的鉴权头写漏了"上想。
+ *
+ * 这里做的是「成对出现」检查：凡是发请求的函数，只要出现了 `Bearer`，
+ * 同一函数体内就必须同时出现 `x-api-key`（说明它按协议分过支）。
+ */
+function checkAuthHeaderByProtocol(files) {
+  const problems = [];
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    // 以「函数定义」为界粗切；只关心带 http 请求的那几段
+    for (const block of splitIntoFunctions(source)) {
+      const hasBearer = /"Authorization"|Authorization:/.test(block.body);
+      const hasXApiKey = /x-api-key/.test(block.body);
+      if (hasBearer && !hasXApiKey) {
+        problems.push(`${file} ${block.name}()：发的是 Bearer，但没有按协议改用 x-api-key`);
+      }
+    }
+  }
+  if (problems.length) {
+    console.error("鉴权头没有按协议区分（Claude 原生会拉不到模型 / 请求 401）：");
+    for (const line of problems) console.error(`  ✗ ${line}`);
+    process.exit(1);
+  }
+  console.log("  ✓ 鉴权头按协议区分：发 Bearer 的地方都同时处理了 x-api-key");
+}
+
+/** 把源码粗切成 { name, body } 的函数块，够用于「同一函数体内成对出现」的判断 */
+function splitIntoFunctions(source) {
+  const out = [];
+  // 匹配 `fn 名字(...)  ...  {` 起始，然后靠花括号配平取整块
+  const re = /\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^>]*>)?\s*\(/g;
+  let match;
+  while ((match = re.exec(source))) {
+    const braceStart = source.indexOf("{", match.index);
+    if (braceStart === -1) continue;
+    let depth = 0;
+    let end = braceStart;
+    for (let i = braceStart; i < source.length; i += 1) {
+      if (source[i] === "{") depth += 1;
+      else if (source[i] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    out.push({ name: match[1], body: source.slice(match.index, end + 1) });
+  }
+  return out;
 }
 
 /* ---------- 自检：故意漏一个参数，必须被抓出来 ---------- */
@@ -205,11 +265,29 @@ async fn caller() {
   const ok2 = calls.length === 1 && calls[0].arity === 2 && calls[0].name === "request_model";
   const fixed = parse(sample.replace('request_model("x", "y")', 'request_model("x", "y", None)'));
   const ok3 = fixed.calls[0].arity === 3;
-  if (!ok1 || !ok2 || !ok3) {
-    console.error(`  ✗ 自检失败：${JSON.stringify({ ok1, ok2, ok3 })}`);
+
+  // 鉴权头检查的自检：只发 Bearer 的要判为问题，加了 x-api-key 的才算过
+  const badAuth = splitIntoFunctions(`
+async fn list_models() {
+    http.get(&url).header("Authorization", format!("Bearer {}", key)).send().await
+}
+`);
+  const goodAuth = splitIntoFunctions(`
+async fn list_models(protocol: &str) {
+    if protocol == "claude" { http.get(&url).header("x-api-key", key) }
+    else { http.get(&url).header("Authorization", format!("Bearer {}", key)) }
+}
+`);
+  const looksBad = (blocks) =>
+    blocks.some((b) => /"Authorization"|Authorization:/.test(b.body) && !/x-api-key/.test(b.body));
+  const ok4 = looksBad(badAuth) === true;
+  const ok5 = looksBad(goodAuth) === false;
+
+  if (!ok1 || !ok2 || !ok3 || !ok4 || !ok5) {
+    console.error(`  ✗ 自检失败：${JSON.stringify({ ok1, ok2, ok3, ok4, ok5 })}`);
     process.exit(1);
   }
-  console.log("  ✓ check-rust-calls 自检通过（漏传参数会被抓出来）");
+  console.log("  ✓ check-rust-calls 自检通过（漏传参数 / 鉴权头漏协议都会被抓出来）");
 } else {
   main();
 }
