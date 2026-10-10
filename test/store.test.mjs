@@ -145,6 +145,47 @@ describe("当前连接改动只同步到已启用的那一家", () => {
   });
 });
 
+describe("保存服务商时，空 Key 不能把已有的 Key 清掉", () => {
+  /* 真实事故：编辑服务商时密码框不回显旧 Key，留空保存会把已存 Key 静默清空，
+   * 之后拉模型 / 对话都 401，而界面上「当前启用的是哪家」看起来完全正常。 */
+  it("updateProvider 传空 apiKey 时保留已有 Key", () => {
+    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", apiKey: "sk-original" });
+    mod.updateProvider(provider.id, { name: "A2", apiKey: "" });
+    assert.equal(mod.getProvider(provider.id).apiKey, "sk-original");
+    assert.equal(mod.getProvider(provider.id).name, "A2");
+  });
+
+  it("updateProvider 不传 apiKey 时同样保留已有 Key", () => {
+    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", apiKey: "sk-original" });
+    mod.updateProvider(provider.id, { name: "A2" });
+    assert.equal(mod.getProvider(provider.id).apiKey, "sk-original");
+  });
+
+  it("updateProvider 传新 Key 时正常覆盖", () => {
+    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", apiKey: "sk-old" });
+    mod.updateProvider(provider.id, { apiKey: "sk-new" });
+    assert.equal(mod.getProvider(provider.id).apiKey, "sk-new");
+  });
+
+  it("patchConnection 传空 apiKey 时，顶层与已启用服务商的 Key 都保留", () => {
+    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", apiKey: "sk-original" });
+    mod.activateProvider(provider.id);
+    // 连接编辑页改了地址但没动 Key 栏
+    mod.patchConnection({ baseUrl: "https://a2.test", apiKey: "" });
+    assert.equal(mod.getSettings().apiKey, "sk-original");
+    assert.equal(mod.getProvider(provider.id).apiKey, "sk-original");
+    assert.equal(mod.getSettings().baseUrl, "https://a2.test");
+  });
+
+  it("patchConnection 传新 apiKey 时正常覆盖", () => {
+    const provider = mod.addProvider({ name: "A", baseUrl: "https://a.test", apiKey: "sk-old" });
+    mod.activateProvider(provider.id);
+    mod.patchConnection({ apiKey: "sk-new" });
+    assert.equal(mod.getSettings().apiKey, "sk-new");
+    assert.equal(mod.getProvider(provider.id).apiKey, "sk-new");
+  });
+});
+
 describe("服务商 id 必须稳定（activeProviderId 不能莫名丢失）", () => {
   /* 拿真实事故换来的回归测试：
    * sanitizeSettings 曾经把服务商列表清洗两遍，而缺 id 时每次都会现场摇一个随机 id，

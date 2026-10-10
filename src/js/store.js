@@ -863,7 +863,12 @@ export function addProvider(input) {
 export function updateProvider(id, patch) {
   const index = state.settings.providers.findIndex((item) => item.id === id);
   if (index === -1) return null;
-  const merged = sanitizeProvider({ ...state.settings.providers[index], ...patch, id });
+  const existing = state.settings.providers[index];
+  // 没传 apiKey 或传了空串时，保留已有的 Key：编辑页的密码框留空不易察觉，
+  // 若直接拿空串覆盖，会把已经存好的 Key 静默清空，导致拉模型 / 对话 401。
+  const nextApiKey =
+    "apiKey" in patch && patch.apiKey ? patch.apiKey : existing.apiKey;
+  const merged = sanitizeProvider({ ...existing, ...patch, apiKey: nextApiKey, id });
   if (!merged) return null;
   const providers = [...state.settings.providers];
   providers[index] = merged;
@@ -930,7 +935,13 @@ export function selectModel(providerId, modelId) {
 export function patchConnection(patch) {
   const allowed = {};
   for (const key of ["protocol", "baseUrl", "apiKey", "model"]) {
-    if (key in patch) allowed[key] = patch[key];
+    if (key in patch) {
+      // apiKey 为空串时跳过：连接编辑页的密码框不会回显旧 Key，
+      // 留空几乎总是「没改 Key」，而不是「要清空 Key」。跳过它，
+      // 顶层和已启用服务商的旧 Key 都会被保留，避免保存后拉模型 / 对话 401。
+      if (key === "apiKey" && !patch.apiKey) continue;
+      allowed[key] = patch[key];
+    }
   }
   if (!Object.keys(allowed).length) return;
   const activeId = state.settings.activeProviderId;
