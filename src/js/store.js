@@ -334,6 +334,18 @@ function sanitizeSettings(raw, base) {
         ),
       ].slice(0, 40)
     : [];
+  // ⚠️ 只清洗一次，之后复用。
+  //
+  // 历史上这里算了两遍，而 `sanitizeProvider` 缺 id 时**会现场生成一个 id**。
+  // 两遍得到两套不同 id：providers 里存第一批、activeProviderId 却拿第二批去比 ——
+  // 永远匹配不上 → activeProviderId 被清成 ""，App 就**静默回退到顶层的
+  // settings.apiKey**（很可能是另一家的 Key），远端收到不认识的 Key 报 401，
+  // 而界面上「当前启用的是谁」看着完全正常。
+  //
+  // 现在 `sanitizeProvider` 的兜底 id 已经改成**确定性**派生（同一份数据反复清洗
+  // 结果一致），但「只算一次」本身仍然要保留：少一次无用功，也少一处将来走样的机会。
+  const providers = sanitizeProviders(raw.providers);
+  const wanted = String(raw.activeProviderId ?? "").trim();
   return {
     protocol: PROTOCOL_PRESETS[raw.protocol] ? raw.protocol : base.protocol,
     baseUrl: String(raw.baseUrl ?? "").trim(),
@@ -343,11 +355,9 @@ function sanitizeSettings(raw, base) {
     budget: Number.isFinite(budget) ? Math.max(0, round2(budget)) : base.budget,
     budgets: sanitizeBudgets(raw.budgets),
     categories: categories.length ? categories : [...base.categories],
-    providers: sanitizeProviders(raw.providers),
+    providers,
     // 指向了不存在的服务商就当成「没有启用任何服务商」
-    activeProviderId: sanitizeProviders(raw.providers).some((item) => item.id === String(raw.activeProviderId ?? "").trim())
-      ? String(raw.activeProviderId).trim()
-      : "",
+    activeProviderId: providers.some((item) => item.id === wanted) ? wanted : "",
   };
 }
 
@@ -503,13 +513,26 @@ function sanitizeBudgets(raw) {
  * 服务商（模型供应商）条目收口。
  * 服务商与模型全部由用户在「模型管理」里显式增删改，不存在任何自动建档 / 自动恢复：
  * 只有用户点了「启用」，它的地址与 Key 才会写进当前连接参数。
+ *
+ * `index` 只用于「没 id 时怎么补」——见下面对 `fallbackId` 的说明。
  */
-function sanitizeProvider(raw) {
+function sanitizeProvider(raw, index = 0) {
   if (!raw || typeof raw !== "object") return null;
-  const id = String(raw.id ?? "").trim().slice(0, 64) || uid();
+  const name = String(raw.name ?? "").trim().slice(0, 40) || "未命名服务商";
+  // 缺 id 时的兜底必须是**确定的**，不能用 `uid()` 现场摇一个随机值 ——
+  // 否则同一份数据被清洗两次会得到两个不同的 id。
+  //
+  // 这不是理论问题：`sanitizeSettings` 曾经把服务商列表算了两遍，于是
+  // providers 里存第一批 id、activeProviderId 却拿第二批去比 → 永远对不上 →
+  // 被清成空 → App 静默回退到顶层 apiKey（可能来自另一家服务商）→ 远端 401，
+  // 而界面上「当前启用的是哪家」看起来完全正常，极难排查。
+  //
+  // 用「下标 + 名称」派生：同一份数据反复清洗结果一致，且不同服务商几乎不会撞。
+  const fallbackId = `p${index}-${name.slice(0, 24)}`;
+  const id = String(raw.id ?? "").trim().slice(0, 64) || fallbackId;
   return {
     id,
-    name: String(raw.name ?? "").trim().slice(0, 40) || "未命名服务商",
+    name,
     protocol: PROTOCOL_PRESETS[raw.protocol] ? raw.protocol : "openai-compatible",
     baseUrl: String(raw.baseUrl ?? "").trim().slice(0, 300),
     apiKey: String(raw.apiKey ?? "").slice(0, 500),
@@ -520,7 +543,10 @@ function sanitizeProvider(raw) {
 
 function sanitizeProviders(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw.map(sanitizeProvider).filter(Boolean).slice(0, 30);
+  return raw
+    .map((item, index) => sanitizeProvider(item, index))
+    .filter(Boolean)
+    .slice(0, 30);
 }
 
 export function load() {
@@ -825,7 +851,10 @@ function writeProviders(providers) {
 
 /** 新建一个服务商（默认不改动当前连接，用户点「启用」才生效） */
 export function addProvider(input) {
-  const provider = sanitizeProvider({ ...input, id: "" });
+  // 新建时**显式**给一个全新 id：这是「新服务商」，本来就要跟别人不同。
+  // 不能靠 sanitizeProvider 里那个「按名称派生」的兜底 —— 用户完全可能
+  // 建两个同名服务商（比如同一家的两个 Key），派生 id 会撞。
+  const provider = sanitizeProvider({ ...input, id: uid() });
   if (!provider) return null;
   writeProviders([...state.settings.providers, provider]);
   return getProvider(provider.id);

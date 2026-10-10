@@ -1,6 +1,6 @@
 /** 对话页：像聊天软件一样跟 AI 记账（消息流 + 内联卡片） */
 
-import { hasBackend, parseImage, parseIntent } from "./bridge.js";
+import { AI_TIMEOUT_MS, hasBackend, parseImage, parseIntent } from "./bridge.js";
 import { openConfirm } from "./confirm.js";
 import { icon } from "./icons.js";
 import { prepareImages, snapshotFiles } from "./image.js";
@@ -30,6 +30,20 @@ const SUGGESTIONS = [
 ];
 
 let busy = false;
+/**
+ * 正在飞的那次请求的「最晚该回来的时刻」（毫秒时间戳），0 表示当前没有在飞。
+ *
+ * 为什么要单独记这个：`busy` 只在请求的 finally 里解除，而 Android 切到后台会
+ * **冻结整个 WebView** —— 连 `setTimeout` 都一起冻住。于是「25 秒超时」根本不会
+ * 按时触发，回到前台后那次请求既不成功也不失败，`busy` 永远是 true，
+ * 发送按钮永久禁用，表现为「切个后台就再也记不进去账了」。
+ *
+ * 记下截止时刻，回到前台时就能判断「这次早就该超时了」，主动收尾。
+ */
+let inflightDeadline = 0;
+/** 正在飞的那条「正在处理…」消息 id，用于超时后把它标成失败 */
+let inflightMessageId = null;
+
 /** 一次最多挂几张待发送图片 */
 const MAX_PENDING_IMAGES = 9;
 /** 已选好、还没发出去的图片（数组，发出后清空；只留缩略图进历史） */
@@ -354,6 +368,11 @@ export async function sendMessage(raw, images = pendingImages) {
   });
   renderChat();
 
+  // 记下这次请求「最晚该回来的时刻」，供切后台回来后兜底收尾用。
+  // 多给 5 秒余量：前端超时（AI_TIMEOUT_MS）先到，这里只是「判死刑」的最后界限。
+  inflightMessageId = thinking.id;
+  inflightDeadline = Date.now() + AI_TIMEOUT_MS + 5000;
+
   try {
     const result = await (images?.length ? runImage(text, images) : runIntent(text));
     updateChat(thinking.id, result);
@@ -365,10 +384,48 @@ export async function sendMessage(raw, images = pendingImages) {
       state: "error",
     });
   } finally {
+    inflightDeadline = 0;
+    inflightMessageId = null;
     busy = false;
     $("#chatSend").disabled = false;
     renderChat();
   }
+}
+
+/* ---------------- 切后台兜底 ---------------- */
+
+/**
+ * 回到前台时检查：那次请求是不是早就该超时了？
+ *
+ * 背景：Android 切后台会冻结 WebView，`setTimeout` 也一并冻住，于是
+ * 「超时」分支不会按时走到，`busy` 卡在 true、发送按钮永久禁用 ——
+ * 用户看到的就是「切个后台就再也记不进去账了」。
+ *
+ * 这里不试图恢复那次请求（它多半已经断了），只做两件事：
+ * 1. 把卡住的那条「正在处理…」标成失败，用户知道发生了什么、可以重发；
+ * 2. **解锁 `busy`**，让发送按钮重新可用。
+ *
+ * 注意只在「确实超过截止时刻」时才动手 —— 如果用户只是快速切出去又回来，
+ * 请求其实还在正常飞，这时不能误杀。
+ */
+function recoverStalledRequest() {
+  if (!busy || !inflightDeadline) return;
+  if (Date.now() < inflightDeadline) return;
+
+  const id = inflightMessageId;
+  if (id) {
+    updateChat(id, {
+      text: "这条请求在切到后台时中断了，没能拿到结果。请再发一次。",
+      kind: "text",
+      state: "error",
+    });
+  }
+  inflightDeadline = 0;
+  inflightMessageId = null;
+  busy = false;
+  const send = $("#chatSend");
+  if (send) send.disabled = false;
+  renderChat();
 }
 
 /** 一次独立请求：拿账目快照 → 解析 → 组装成一条助理消息 */
@@ -430,7 +487,19 @@ function buildLedger() {
 const resolveIds = (ids, byLineId) => [...new Set(ids ?? [])].map((id) => byLineId.get(id)).filter(Boolean);
 
 /* ---------------- 事件绑定 ---------------- */
+/** 绑定「回到前台」监听（幂等，可重复调用） */
+let visibilityBound = false;
+function bindVisibilityRecovery() {
+  if (visibilityBound || typeof document === "undefined") return;
+  visibilityBound = true;
+  document.addEventListener("visibilitychange", () => {
+    // 只认「变回可见」；切出去那一刻不用做什么
+    if (document.visibilityState === "visible") recoverStalledRequest();
+  });
+}
+
 export function bindChat({ onNeedSettings } = {}) {
+  bindVisibilityRecovery();
   const input = $("#chatInput");
   const send = $("#chatSend");
 

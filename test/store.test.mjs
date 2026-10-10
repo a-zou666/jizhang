@@ -145,6 +145,73 @@ describe("当前连接改动只同步到已启用的那一家", () => {
   });
 });
 
+describe("服务商 id 必须稳定（activeProviderId 不能莫名丢失）", () => {
+  /* 拿真实事故换来的回归测试：
+   * sanitizeSettings 曾经把服务商列表清洗两遍，而缺 id 时每次都会现场摇一个随机 id，
+   * 于是 providers 里存第一批、activeProviderId 却拿第二批去比 → 永远对不上 →
+   * 被清成 "" → App 静默回退到顶层 apiKey（可能是别家的）→ 远端 401，
+   * 而界面上「当前启用的哪家」看起来完全正常。 */
+  it("缺 id 的老数据：清洗两次得到同一套 id（幂等）", () => {
+    store.set(
+      "ai-ledger/v1",
+      JSON.stringify({
+        records: [],
+        chat: [],
+        settings: {
+          providers: [{ name: "豆包（火山方舟）" }, { name: "mini" }],
+          activeProviderId: "",
+        },
+      }),
+    );
+    mod.load();
+    const first = mod.getProviders().map((item) => item.id);
+    mod.load();
+    const second = mod.getProviders().map((item) => item.id);
+    assert.deepEqual(second, first, "同一份数据反复清洗，id 必须一致");
+    assert.ok(first.every(Boolean), "每个服务商都要有 id");
+  });
+
+  it("activeProviderId 指向的服务商 id 能对上，就不会被清空", () => {
+    store.set(
+      "ai-ledger/v1",
+      JSON.stringify({
+        records: [],
+        chat: [],
+        settings: {
+          providers: [{ name: "豆包" }, { name: "mini" }],
+          // 缺 id 的兜底 id 由「下标 + 名称」派生，第 0 条是 p0-豆包
+          activeProviderId: "p0-豆包",
+        },
+      }),
+    );
+    mod.load();
+    assert.equal(mod.getSettings().activeProviderId, "p0-豆包");
+    assert.equal(mod.getActiveProvider().name, "豆包");
+  });
+
+  it("同名服务商各自独立（新建时用全新 id，不靠名称派生）", () => {
+    const a = mod.addProvider({ name: "同名", baseUrl: "https://a.test", apiKey: "sk-a" });
+    const b = mod.addProvider({ name: "同名", baseUrl: "https://b.test", apiKey: "sk-b" });
+    assert.notEqual(a.id, b.id, "两个同名服务商必须是不同 id");
+    assert.equal(mod.getProvider(a.id).apiKey, "sk-a");
+    assert.equal(mod.getProvider(b.id).apiKey, "sk-b");
+  });
+
+  it("activeProviderId 指向不存在的服务商时才清空", () => {
+    store.set(
+      "ai-ledger/v1",
+      JSON.stringify({
+        records: [],
+        chat: [],
+        settings: { providers: [{ name: "豆包" }], activeProviderId: "根本不存在" },
+      }),
+    );
+    mod.load();
+    assert.equal(mod.getSettings().activeProviderId, "");
+    assert.equal(mod.getActiveProvider(), null);
+  });
+});
+
 describe("预算：默认月预算 + 单月覆盖", () => {
   const october = new Date(2026, 9, 1);
   const november = new Date(2026, 10, 1);

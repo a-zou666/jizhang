@@ -296,6 +296,7 @@ const frontSources = readdirSync(resolve(ROOT, "src/js"))
 const bridgeSource = readFileSync(resolve(ROOT, "src/js/bridge.js"), "utf8");
 const indexSource = readFileSync(resolve(ROOT, "src/index.html"), "utf8");
 const settingsSource = readFileSync(resolve(ROOT, "src/js/settings.js"), "utf8");
+const chatSource = readFileSync(resolve(ROOT, "src/js/chat.js"), "utf8");
 
 if (/SpeechRecognition|webkitSpeechRecognition|MediaRecorder|navigator\.mediaDevices/.test(frontSources)) {
   fail("前端模块仍残留语音引擎相关代码（已下线）");
@@ -1808,6 +1809,19 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   }
 
   store.replaceAll({ records: [], settings: {} });
+}
+
+/* --- 切后台兜底：Android 冻结 WebView 时 setTimeout 也冻住，
+       「正在处理…」的请求可能永远不 resolve，busy 卡 true → 发送按钮永久禁用。
+       必须有 visibilitychange 兜底才能解锁。 --- */
+if (!/visibilitychange/.test(chatSource)) {
+  fail("chat.js 没有监听 visibilitychange：切后台再回来会卡死发送按钮");
+} else if (!/recoverStalledRequest/.test(chatSource)) {
+  fail("chat.js 缺少 recoverStalledRequest：切后台后不会解锁发送");
+} else if (!/inflightDeadline/.test(chatSource)) {
+  fail("chat.js 没有记录请求截止时刻，回前台时无法判断该不该收尾");
+} else {
+  ok("对话页有切后台兜底：回到前台时若请求已超时会解锁发送并标记失败");
 }
 
 /* --- AI 解析必须有超时上限，避免界面一直无反馈 --- */
