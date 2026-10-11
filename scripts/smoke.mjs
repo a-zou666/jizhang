@@ -1811,6 +1811,67 @@ if (st.protocol !== "openai-compatible" || st.weekStart !== 1 || st.budget !== 0
   store.replaceAll({ records: [], settings: {} });
 }
 
+/* --- 消息动作（豆包式）：用户消息可 复制 / 编辑 / 重发，失败回复带「重发」 --- */
+{
+  const chat = await import(new URL("../src/js/chat.js", import.meta.url));
+  const list = documentStub.getElementById("chatList");
+  const input = documentStub.getElementById("chatInput");
+
+  store.clearChat();
+  store.appendChat({
+    role: "user",
+    text: "昨天晚饭炒饭 25",
+    kind: "text",
+    state: "done",
+    at: Date.now(),
+    images: [],
+    views: [],
+  });
+  store.appendChat({ role: "assistant", text: "没处理成功：HTTP 401", kind: "text", state: "error", at: Date.now() });
+  chat.renderChat();
+
+  const labels = list.querySelectorAll(".chat-msg-action").map((btn) => btn.getAttribute("aria-label"));
+  if (labels.join("/") !== "复制/编辑/重发/复制" || !list.querySelector(".chat-bubble__resend")) {
+    fail("消息动作行不完整", JSON.stringify(labels));
+  } else ok("消息动作行齐全：用户消息 = 复制 / 编辑 / 重发，纯文字回复 = 复制，失败回复带「重发」按钮");
+
+  // 编辑：原话放回输入框，改完自己发
+  list.querySelectorAll(".chat-msg-action")[1].__listeners.get("click")[0]();
+  if (input.value !== "昨天晚饭炒饭 25") {
+    fail("「编辑」没有把原话放回输入框", String(input.value));
+  } else ok("「编辑」把原话放回输入框（图片消息会连图一起放回待发区）");
+
+  // 重发：原样再发一遍 → 新增用户消息 + 助理回复（无后端走 mock）
+  const before = store.getChat().length;
+  await list.querySelectorAll(".chat-msg-action")[2].__listeners.get("click")[0]();
+  const after = store.getChat();
+  const resent = after[after.length - 2];
+  if (after.length !== before + 2 || resent?.role !== "user" || resent?.text !== "昨天晚饭炒饭 25") {
+    fail("点「重发」没有把原话再发一遍", JSON.stringify(after.slice(-2)));
+  } else ok("点「重发」把当时那条用户消息原样再发了一遍（不用重新打字）");
+
+  // 复制：换上带 clipboard 的 navigator 桩，验证复制的是原文
+  let copied = "";
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { userAgent: "node", vibrate() {}, clipboard: { writeText: async (t) => { copied = t; } } },
+  });
+  await list.querySelectorAll(".chat-msg-action")[0].__listeners.get("click")[0]();
+  if (copied !== "昨天晚饭炒饭 25") {
+    fail("「复制」没有复制到原文", copied);
+  } else ok("「复制」把消息原文放进剪贴板（无 clipboard 时退回 execCommand）");
+
+  // 还原 navigator 桩，别让后面的块用到带 clipboard 的替身
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { userAgent: "node", vibrate() {}, mediaDevices: undefined, clipboard: undefined },
+  });
+
+  store.clearChat();
+  input.value = "";
+  store.replaceAll({ records: [], settings: {} });
+}
+
 /* --- 切后台兜底：Android 冻结 WebView 时 setTimeout 也冻住，
        「正在处理…」的请求可能永远不 resolve，busy 卡 true → 发送按钮永久禁用。
        必须有 visibilitychange 兜底才能解锁。 --- */

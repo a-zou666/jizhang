@@ -133,7 +133,13 @@ export function renderChat() {
   empty.hidden = messages.length > 0;
   suggestions.hidden = messages.length > 0;
 
-  list.replaceChildren(...messages.map((message) => bubbleFor(message)));
+  list.replaceChildren(
+    ...messages.map((message, index) => {
+      // 失败消息上的「重发」需要拿到当时那条用户消息：取它前面最近的一条
+      const prevUser = messages.slice(0, index).reverse().find((item) => item.role === "user");
+      return bubbleFor(message, prevUser);
+    }),
+  );
   scrollToEnd();
 
   // 头部胶囊：现在用的是哪个服务商 / 模型
@@ -171,7 +177,7 @@ const fileRowHtml = (record) => `
     <span class="intent-row__amount">${escapeHtml(yuan(record.amount))}</span>
   </div>`;
 
-function bubbleFor(message) {
+function bubbleFor(message, prevUser = null) {
   const isUser = message.role === "user";
   const wrap = document.createElement("div");
   wrap.classList.add("chat-row");
@@ -223,6 +229,20 @@ function bubbleFor(message) {
     hint.classList.add("chat-bubble__hint");
     hint.textContent = "没有成功，可以再发一次";
     body.append(hint);
+
+    // 一键重发：把当时那条用户消息原样再发一遍，不用重新打字 / 重新选图
+    if (resendParamsOf(prevUser)) {
+      const actions = document.createElement("div");
+      actions.classList.add("chat-bubble__actions");
+      const resend = document.createElement("button");
+      // 类名走 classList.add 字面量（别经 button() 助手传参），死样式契约才认账
+      resend.classList.add("ghost-btn", "chat-bubble__resend");
+      resend.type = "button";
+      resend.textContent = "重发";
+      resend.addEventListener("click", () => resendMessage(prevUser));
+      actions.append(resend);
+      body.append(actions);
+    }
   }
 
   const time = document.createElement("span");
@@ -230,8 +250,45 @@ function bubbleFor(message) {
   time.textContent = timeText(message.at);
   body.append(time);
 
+  // 消息动作行（豆包式）：用户消息 = 复制 / 编辑 / 重发；纯文字回复 = 复制
+  const actions = actionsFor(message, isUser);
+  if (actions) body.append(actions);
+
   wrap.append(body);
   return wrap;
+}
+
+/** 消息气泡下方的动作行：没有可做的动作就返回 null（不渲染空行） */
+function actionsFor(message, isUser) {
+  const actions = document.createElement("div");
+  actions.classList.add("chat-bubble__actions");
+
+  if (isUser) {
+    const text = String(message.text ?? "");
+    if (text) {
+      actions.append(iconAction("copy", "复制", () => copyMessageText(text)));
+      actions.append(iconAction("pencil", "编辑", () => editMessage(message)));
+    }
+    if (resendParamsOf(message)) {
+      actions.append(iconAction("refresh", "重发", () => resendMessage(message)));
+    }
+  } else if (message.kind === "text" && message.state !== "pending" && message.text) {
+    actions.append(iconAction("copy", "复制", () => copyMessageText(message.text)));
+  }
+
+  return actions.childNodes.length ? actions : null;
+}
+
+/** 小图标动作按钮（豆包式）：图标 + aria-label，具体样式看 .chat-msg-action */
+function iconAction(name, label, onClick) {
+  const node = document.createElement("button");
+  node.classList.add("chat-msg-action");
+  node.type = "button";
+  node.title = label;
+  node.setAttribute("aria-label", label);
+  node.innerHTML = icon(name, { size: 15 });
+  node.addEventListener("click", onClick);
+  return node;
 }
 
 /** 消息里的账目卡片：记账 / 删除 / 查询各有各的动作 */
@@ -331,23 +388,101 @@ export async function sendMessage(raw, images = pendingImages) {
   const input = $("#chatInput");
   if (busy) return;
   if (!text && !images?.length) return;
+  if (!modelConfigReady()) return;
 
-  if (hasBackend()) {
-    // 模型池在设置里维护，用哪个模型在这里选 —— 没选就没法请求，先说清楚该去哪一步
-    if (!getProviders().length) {
-      toast("先去 设置 → 模型管理 添加服务商并拉取模型", "error");
-      return;
-    }
-    if (!getSettings().model || !getSettings().apiKey) {
-      toast("先点顶部胶囊选一个要用的模型", "error");
-      return;
-    }
-  }
-
-  busy = true;
-  $("#chatSend").disabled = true;
   if (input) input.value = "";
   if (images?.length) clearPendingImages();
+  await dispatchSend(text, images);
+}
+
+/** 后端模型配置齐不齐：没齐就提示该去哪一步（发送、重发、编辑后发送都走这一道） */
+function modelConfigReady() {
+  if (!hasBackend()) return true;
+  if (!getProviders().length) {
+    toast("先去 设置 → 模型管理 添加服务商并拉取模型", "error");
+    return false;
+  }
+  if (!getSettings().model || !getSettings().apiKey) {
+    toast("先点顶部胶囊选一个要用的模型", "error");
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 从一条历史用户消息还原出可重发 / 可编辑的入参；还原不出任何内容时返回 null。
+ *
+ * 送模型的原图（1280px）不入库，消息里只有缩略图（192px）与预览图（720px）——
+ * 重发 / 编辑时用预览图当发送图，读小票足够清楚；老消息没有 views 就还原不出图。
+ */
+function resendParamsOf(userMessage) {
+  if (!userMessage || userMessage.role !== "user") return null;
+  const text = String(userMessage.text ?? "").trim();
+  const images = (userMessage.images ?? [])
+    .map((thumb, index) => {
+      const view = userMessage.views?.[index];
+      return view ? { dataUrl: view, thumb, view, mime: "image/jpeg", name: "图片" } : null;
+    })
+    .filter(Boolean);
+  if (!text && !images.length) return null;
+  return { text, images };
+}
+
+/** 点「重发」：把当时那条用户消息原样再发一遍，不用重新打字 / 重新选图 */
+async function resendMessage(userMessage) {
+  if (busy) return;
+  const params = resendParamsOf(userMessage);
+  if (!params || !modelConfigReady()) return;
+  await dispatchSend(params.text, params.images);
+}
+
+/** 点「编辑」：把文字与图片放回输入框 / 待发区，改完自己再发 */
+function editMessage(userMessage) {
+  if (busy) return;
+  const params = resendParamsOf(userMessage);
+  const input = $("#chatInput");
+  if (!params || !input) return;
+  input.value = params.text;
+  growInput(input);
+  if (params.images.length) setPendingImages(params.images);
+  input.focus();
+  haptic(8);
+  toast("已放回输入框，改完再发", "ok");
+}
+
+/** 输入框高度自适应（输入监听与「编辑」回填共用） */
+function growInput(box) {
+  if (!box) return;
+  box.style.height = "auto";
+  box.style.height = `${Math.min(box.scrollHeight, 120)}px`;
+}
+
+/** 复制消息文字：优先 navigator.clipboard，不行退回 execCommand（部分 WebView 没有前者） */
+async function copyMessageText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.append(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    haptic(8);
+    toast("已复制", "ok");
+  } catch {
+    toast("复制失败", "error");
+  }
+}
+
+/** 发送的公共主体：追加用户消息 + 「正在处理…」→ 请求 → 落结果（发送与重发共用） */
+async function dispatchSend(text, images) {
+  busy = true;
+  $("#chatSend").disabled = true;
 
   appendChat({
     role: "user",
@@ -503,10 +638,7 @@ export function bindChat({ onNeedSettings } = {}) {
   const input = $("#chatInput");
   const send = $("#chatSend");
 
-  const grow = () => {
-    input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
-  };
+  const grow = () => growInput(input);
 
   send.addEventListener("click", () => sendMessage(input.value));
   input.addEventListener("input", grow);

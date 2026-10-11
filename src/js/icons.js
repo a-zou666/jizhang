@@ -82,6 +82,12 @@ export const ICONS = {
   refresh: `
     <path d="M20 12a8 8 0 1 1-2.34-5.66" ${STROKE} />
     <path d="M20 4.4V10h-5.6" ${STROKE} />`,
+  copy: `
+    <rect x="8.7" y="8.7" width="10.9" height="10.9" rx="2.3" ${STROKE} />
+    <path d="M15.3 5.4H6.7a2.3 2.3 0 0 0-2.3 2.3v8.6" ${STROKE} />`,
+  pencil: `
+    <path d="M16.9 3.6a2.1 2.1 0 0 1 3 3L7.4 19.1l-4.2 1.2a.5.5 0 0 1-.6-.6l1.2-4.2Z" ${STROKE} />
+    <path d="M14.7 5.8 18.7 9.8" ${STROKE} />`,
 
   /* 设置 · 数据 */
   download: `
